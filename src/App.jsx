@@ -1,0 +1,1578 @@
+import React, { useMemo, useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ShieldCheck, Bell, UserCheck, Wallet, MessageSquareWarning, Megaphone, Siren, Home,
+  Users, Car, QrCode, PhoneCall, CheckCircle2, Clock, LayoutDashboard, Building2,
+  ReceiptText, ClipboardList, BarChart3, Search, Settings, UserRound, ArrowRight,
+  Truck, BadgeCheck, CreditCard, FileText, Wrench, Send, X, Plus, Download, AlertTriangle,
+  UserPlus, LogOut, Menu, ChevronLeft, IndianRupee, Check, Camera, Bot, Sparkles, ShieldAlert
+} from "lucide-react";
+
+const Card = ({ children, className = "" }) => (
+  <div className={`rounded-2xl bg-white shadow-sm border border-slate-100 ${className}`}>{children}</div>
+);
+
+const Button = ({ children, onClick, variant = "primary", className = "", disabled = false }) => {
+  const styles = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700",
+    success: "bg-emerald-500 text-white hover:bg-emerald-600",
+    danger: "bg-red-500 text-white hover:bg-red-600",
+    ghost: "bg-slate-100 text-slate-700 hover:bg-slate-200",
+    navy: "bg-slate-900 text-white hover:bg-slate-800",
+    outline: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
+  };
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 ${styles[variant]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+const PhoneShell = ({ children, dark = false }) => (
+  <div className={`w-full max-w-[340px] sm:max-w-[360px] h-[640px] sm:h-[700px] rounded-[2rem] p-2 phone-polish mx-auto ${dark ? "bg-slate-950" : "bg-slate-900"}`}>
+    <div className={`h-full rounded-[1.7rem] overflow-hidden ${dark ? "bg-slate-950" : "bg-slate-50"}`}>
+      <div className="h-6 flex items-center justify-center shrink-0">
+        <div className={`w-20 h-1.5 rounded-full ${dark ? "bg-slate-700" : "bg-slate-300"}`} />
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const HeaderBack = ({ title, subtitle, onBack, dark = false }) => (
+  <div className="flex items-center gap-3 mb-5">
+    <button
+      onClick={onBack}
+      className={`h-10 w-10 rounded-xl flex items-center justify-center ${dark ? "bg-slate-900 text-white" : "bg-white text-slate-700 border border-slate-100"}`}
+    >
+      <ChevronLeft size={20} />
+    </button>
+    <div>
+      <h2 className={`text-xl font-black ${dark ? "text-white" : "text-slate-950"}`}>{title}</h2>
+      {subtitle && <p className={`text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>{subtitle}</p>}
+    </div>
+  </div>
+);
+
+const Logo = ({ dark = false }) => (
+  <div className="flex items-center gap-2">
+    <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-200/40">
+      <ShieldCheck className="text-white" size={23} />
+    </div>
+    <div>
+      <div className={`text-xl font-black tracking-tight ${dark ? "text-white" : "text-slate-950"}`}>SocioGate</div>
+      <div className={`text-xs ${dark ? "text-cyan-200" : "text-slate-500"}`}>Smart Living Begins at the Gate</div>
+    </div>
+  </div>
+);
+
+const DarkTextInput = React.memo(({ label, value, onChange }) => (
+  <div>
+    <label className="text-xs text-slate-500">{label}</label>
+    <input
+      className="mt-1 w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 outline-none text-white"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  </div>
+));
+
+const initials = (name = "NA") =>
+  name.split(" ").filter(Boolean).map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+
+const normalizeMobile = (mobile = "") => String(mobile).replace(/\D/g, "").slice(-10);
+
+const visitorBadge = (status) => {
+  if (["approved", "inside"].includes(status)) return "bg-emerald-100 text-emerald-700";
+  if (status === "pending") return "bg-blue-100 text-blue-700";
+  if (status === "auto closed") return "bg-purple-100 text-purple-700";
+  if (status === "exited") return "bg-slate-100 text-slate-700";
+  if (status === "wrong entry") return "bg-red-100 text-red-700";
+  if (status === "rejected") return "bg-red-100 text-red-700";
+  return "bg-slate-100 text-slate-600";
+};
+
+const residentDisplayStatus = (status) => {
+  if (status === "auto closed") return "exited";
+  return status || "none";
+};
+
+const residentDisplayBadge = (status) => {
+  if (status === "auto closed") return "bg-slate-100 text-slate-700";
+  return visitorBadge(status);
+};
+
+const GuardStatusCard = ({ status, exitTime = "12:25 PM" }) => {
+  const config = {
+    exited: {
+      title: "Visitor Exited",
+      subtitle: "Exit completed successfully",
+      timeLabel: "Exit Time",
+      time: exitTime,
+      dot: "bg-emerald-400",
+      border: "border-emerald-400/30",
+      glow: "shadow-emerald-950/30",
+      text: "text-emerald-300",
+      bg: "from-slate-950 via-slate-900 to-emerald-950",
+    },
+    "auto closed": {
+      title: "Auto Closed",
+      subtitle: "System automatically closed this delivery pass",
+      timeLabel: "Closed At",
+      time: exitTime,
+      dot: "bg-purple-400",
+      border: "border-purple-400/30",
+      glow: "shadow-purple-950/30",
+      text: "text-purple-300",
+      bg: "from-slate-950 via-slate-900 to-purple-950",
+    },
+    "wrong entry": {
+      title: "Wrong Entry Reported",
+      subtitle: "Resident marked this entry as suspicious",
+      timeLabel: "Reported At",
+      time: "12:28 PM",
+      dot: "bg-red-400",
+      border: "border-red-400/30",
+      glow: "shadow-red-950/30",
+      text: "text-red-300",
+      bg: "from-red-950 via-slate-950 to-red-950",
+    },
+    default: {
+      title: "Pass Closed",
+      subtitle: "This pass is no longer active",
+      timeLabel: "Status",
+      time: status || "closed",
+      dot: "bg-cyan-400",
+      border: "border-cyan-400/30",
+      glow: "shadow-cyan-950/30",
+      text: "text-cyan-300",
+      bg: "from-slate-950 via-slate-900 to-cyan-950",
+    },
+  };
+  const item = config[status] || config.default;
+  return (
+    <Card className={`mt-5 p-5 bg-gradient-to-r ${item.bg} ${item.border} text-white shadow-xl ${item.glow}`}>
+      <div className="flex items-start gap-3">
+        <span className={`mt-1 h-3 w-3 rounded-full ${item.dot} shadow-lg animate-pulse`} />
+        <div>
+          <p className="font-black text-lg text-white">{item.title}</p>
+          <p className="mt-1 text-sm text-slate-300">{item.subtitle}</p>
+          <p className={`mt-2 text-sm font-bold ${item.text}`}>{item.timeLabel}: {item.time}</p>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const VehicleStatusCard = ({ outTime = "12:05 PM" }) => (
+  <Card className="mt-5 p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 border-cyan-400/30 text-white shadow-xl shadow-cyan-950/30">
+    <div className="flex items-start gap-3">
+      <span className="mt-1 h-3 w-3 rounded-full bg-cyan-400 shadow-lg animate-pulse" />
+      <div>
+        <p className="font-black text-lg text-white">Vehicle Exited</p>
+        <p className="mt-1 text-sm text-slate-300">Vehicle successfully left society</p>
+        <p className="mt-2 text-sm font-bold text-cyan-300">Out Time: {outTime}</p>
+      </div>
+    </div>
+  </Card>
+);
+
+function Toast({ toast, clear }) {
+  return (
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 20, opacity: 0 }}
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-950 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold"
+          onClick={clear}
+        >
+          {toast}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, addLog, notify, billPaid, setBillPaid }) {
+  const [screen, setScreen] = useState("splash");
+  const [showPopup, setShowPopup] = useState(false);
+  const [complaintRaised, setComplaintRaised] = useState(false);
+  const latest = activeVisitor || visitorHistory[0];
+
+  useEffect(() => {
+    if (screen === "dashboard" && activeVisitor?.status === "pending") setShowPopup(true);
+  }, [screen, activeVisitor?.id, activeVisitor?.status]);
+
+  const approve = () => {
+    if (!activeVisitor) return;
+    const updated = {
+      ...activeVisitor,
+      status: "approved",
+      approvedBy: "Jagmeet Singh",
+      approvedAt: "11:46 AM",
+    };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    addLog(`Resident approved ${updated.name} for ${updated.flat}`);
+    setShowPopup(false);
+    notify("Visitor approved");
+  };
+
+  const reject = () => {
+    if (!activeVisitor) return;
+    const updated = { ...activeVisitor, status: "rejected", rejectedAt: "11:46 AM" };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    addLog(`Resident rejected ${updated.name}`);
+    setShowPopup(false);
+    notify("Visitor rejected");
+  };
+
+  const wrongEntry = () => {
+    if (!latest) return;
+    const updated = {
+      ...latest,
+      status: "wrong entry",
+      wrongEntryAt: "12:28 PM",
+      riskScore: 92,
+      riskLabel: "High Risk",
+    };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    addLog(`Wrong Entry Alert: Resident A-1204 reported ${updated.name} as wrong entry`);
+    notify("Wrong entry alert sent to guard and admin");
+  };
+
+  const callVisitor = () => {
+    if (!latest?.mobile) {
+      notify("Visitor mobile number not available");
+      return;
+    }
+    window.location.href = `tel:${latest.mobile}`;
+  };
+
+  const DashboardCard = ({ Icon, title, sub, onClick, urgent }) => (
+    <button onClick={onClick} className="text-left rounded-2xl bg-white shadow-md border border-slate-200 p-4 active:scale-[0.98] transition relative overflow-hidden min-h-[112px]">
+      {urgent && <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />}
+      <Icon className="text-blue-600" size={25} />
+      <p className="font-bold mt-3">{title}</p>
+      <p className="text-xs text-slate-500 mt-1">{sub}</p>
+    </button>
+  );
+
+  if (screen === "splash") {
+    return (
+      <PhoneShell>
+        <div className="h-full bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-400 flex flex-col items-center justify-center text-white p-8 text-center">
+          <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mb-5 h-24 w-24 rounded-[2rem] bg-white/20 backdrop-blur flex items-center justify-center">
+            <ShieldCheck size={54} />
+          </motion.div>
+          <h1 className="text-4xl font-black">SocioGate</h1>
+          <p className="mt-2 text-cyan-50">Smart Living Begins at the Gate</p>
+          <button onClick={() => setScreen("login")} className="mt-12 w-full rounded-2xl bg-white px-5 py-4 text-center text-base font-black text-blue-700 shadow-xl shadow-blue-900/20 border border-white hover:bg-blue-50 active:scale-[0.98] transition">
+            Start Demo
+          </button>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "login") {
+    return (
+      <PhoneShell>
+        <div className="h-full overflow-y-auto sg-scroll bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-400 p-5">
+          <div className="flex flex-col items-center text-white pt-8">
+            <div className="h-20 w-20 rounded-[1.7rem] bg-white/20 backdrop-blur flex items-center justify-center">
+              <ShieldCheck size={46} />
+            </div>
+            <h1 className="text-4xl font-black mt-5">SocioGate</h1>
+            <p className="text-sm text-blue-50 mt-1">Smart Living Begins at the Gate</p>
+          </div>
+          <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-2xl">
+            <h2 className="text-2xl font-black text-slate-950">Welcome Back</h2>
+            <p className="text-sm text-slate-500 mt-1">Login to continue</p>
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="text-sm font-bold text-slate-800">Mobile Number</label>
+                <div className="mt-2 flex rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                  <span className="px-4 py-4 border-r border-slate-200 text-slate-700 font-semibold">+91</span>
+                  <input className="flex-1 p-4 outline-none text-slate-900" defaultValue="9876543210" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-800">Society Code</label>
+                <input className="mt-2 w-full rounded-2xl border border-slate-200 p-4 outline-none text-slate-900" defaultValue="GREEN101" />
+              </div>
+              <Button onClick={() => setScreen("dashboard")} className="w-full text-base">Login <ArrowRight size={18} /></Button>
+            </div>
+            <div className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">
+              Demo Society: <b>Green Meadows Society</b><br />Flat: <b>A-1204</b>
+            </div>
+          </div>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "bills") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="Maintenance Bills" subtitle="Billing ERP connected" onBack={() => setScreen("dashboard")} />
+          <div className="rounded-3xl bg-gradient-to-r from-blue-700 to-cyan-500 p-5 text-white">
+            <p className="text-blue-100">Total Due</p>
+            <h1 className="text-4xl font-black mt-1">{billPaid ? "₹0" : "₹4,500"}</h1>
+            <p className="text-sm text-blue-100 mt-1">Due date: 10 June 2026</p>
+          </div>
+          <Card className="p-4 mt-4 space-y-3">
+            <div className="flex justify-between"><span>Maintenance</span><b>₹3,000</b></div>
+            <div className="flex justify-between"><span>Parking</span><b>₹800</b></div>
+            <div className="flex justify-between"><span>Water</span><b>₹400</b></div>
+            <div className="flex justify-between"><span>Sinking Fund</span><b>₹300</b></div>
+          </Card>
+          <Button
+            disabled={billPaid}
+            onClick={() => {
+              setBillPaid(true);
+              addLog("Resident paid maintenance bill ₹4,500 from A-1204");
+              notify("Payment successful. ERP billing updated.");
+            }}
+            className="w-full mt-4"
+            variant="success"
+          >
+            <CreditCard size={18} /> {billPaid ? "Paid Successfully" : "Pay Now"}
+          </Button>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "complaints") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="Complaints" subtitle="Raise and track tickets" onBack={() => setScreen("dashboard")} />
+          <Button onClick={() => setScreen("complaintForm")} className="w-full"><Plus size={18} /> Raise New Complaint</Button>
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            {[[Wrench, "Lift"], [AlertTriangle, "Security"], [MessageSquareWarning, "Housekeeping"], [Settings, "Electrical"]].map(([Icon, t]) => (
+              <Card key={t} className="p-4"><Icon className="text-blue-600" /><p className="font-bold mt-2">{t}</p></Card>
+            ))}
+          </div>
+          <Card className="p-4 mt-4">
+            <div className="flex justify-between">
+              <div><p className="font-black">SG-1024 • Lift Issue</p><p className="text-sm text-slate-500">Assigned: Maintenance Team</p></div>
+              <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full h-fit">In Progress</span>
+            </div>
+          </Card>
+          {complaintRaised && <Card className="p-4 mt-3 border-emerald-200 bg-emerald-50"><p className="font-black">SG-1031 • Water Leakage</p><p className="text-sm text-slate-500">Status: New • Assigned soon</p></Card>}
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "complaintForm") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="New Complaint" subtitle="Demo ticket creation" onBack={() => setScreen("complaints")} />
+          <div className="space-y-3">
+            <input className="w-full rounded-2xl border p-4" defaultValue="Water Leakage" />
+            <textarea className="w-full rounded-2xl border p-4 h-28" defaultValue="Water leakage near parking area B2." />
+            <Button onClick={() => { setComplaintRaised(true); addLog("Resident raised complaint SG-1031"); notify("Complaint SG-1031 created"); setScreen("complaints"); }} className="w-full">
+              <Send size={18} /> Submit Complaint
+            </Button>
+          </div>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "notices") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="Notices" subtitle="Society announcements" onBack={() => setScreen("dashboard")} />
+          {["Water tank cleaning tomorrow from 10 AM to 1 PM", "AGM meeting on Sunday, 6 PM at clubhouse", "New parking stickers available from admin office"].map((n, i) => (
+            <Card key={i} className="p-4 mt-3">
+              <div className="flex gap-3"><Megaphone className="text-blue-600" /><div><p className="font-bold">{n}</p><p className="text-xs text-slate-500 mt-1">Admin • Green Meadows Society</p></div></div>
+            </Card>
+          ))}
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "sos") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 flex flex-col justify-center text-center">
+          <Siren className="mx-auto text-red-500" size={88} />
+          <h2 className="text-3xl font-black mt-5">Emergency SOS</h2>
+          <p className="text-slate-500 mt-2">This will alert guard, admin, and emergency contacts.</p>
+          <Button onClick={() => { addLog("SOS alert triggered by A-1204"); notify("SOS alert sent to security"); setScreen("dashboard"); }} variant="danger" className="w-full mt-8">Send SOS Alert</Button>
+          <Button onClick={() => setScreen("dashboard")} variant="ghost" className="w-full mt-3">Cancel</Button>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  return (
+    <PhoneShell>
+      <div className="h-full bg-slate-50 flex flex-col relative">
+        <div className="flex-1 overflow-y-auto sg-scroll p-5 pb-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm text-slate-500">Good Morning</p><h2 className="text-2xl font-black text-slate-950">Jagmeet</h2><p className="text-xs text-slate-500">Flat A-1204</p></div>
+            <button onClick={() => activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} className="relative h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+              <Bell className="text-blue-600" />
+              {activeVisitor?.status === "pending" && <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 animate-pulse" />}
+            </button>
+          </div>
+
+          <button onClick={() => setScreen("sos")} className="mt-5 w-full text-left rounded-3xl bg-gradient-to-r from-blue-700 to-cyan-500 p-5 text-white shadow-xl shadow-blue-100 active:scale-[0.99]">
+            <div className="flex justify-between items-center"><div><p className="text-sm text-blue-100">Emergency Ready</p><h3 className="text-xl font-black mt-1">Your society is secure</h3></div><Siren size={36} /></div>
+          </button>
+
+          <div className="grid grid-cols-2 gap-3 mt-5">
+            <DashboardCard Icon={UserCheck} title="Visitors" sub={activeVisitor ? activeVisitor.status : "All clear"} urgent={activeVisitor?.status === "pending"} onClick={() => activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} />
+            <DashboardCard Icon={Wallet} title="Bills" sub={billPaid ? "All paid" : "₹4,500 due"} onClick={() => setScreen("bills")} />
+            <DashboardCard Icon={MessageSquareWarning} title="Complaints" sub={complaintRaised ? "2 active" : "1 active"} onClick={() => setScreen("complaints")} />
+            <DashboardCard Icon={Megaphone} title="Notices" sub="3 new" onClick={() => setScreen("notices")} />
+          </div>
+
+          <Card className="mt-5 p-4 shadow-md border-slate-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm text-slate-500">Visitor activity</p>
+                <h3 className="font-black mt-1 text-slate-950">{latest ? latest.name : "No visitor yet"}</h3>
+                <p className="text-xs text-slate-600">{latest ? `${latest.purpose} • ${latest.gate}` : "No active request"}</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {latest ? (latest.exitTime !== "--" ? `Exit: ${latest.exitTime}` : latest.entryTime !== "--" ? `Entered: ${latest.entryTime}` : latest.approvedAt !== "--" ? `Approved: ${latest.approvedAt}` : latest.status) : "All clear"}
+                </p>
+              </div>
+              <span className={`text-xs rounded-full px-3 py-1 ${residentDisplayBadge(latest?.status)}`}>{residentDisplayStatus(latest?.status)}</span>
+            </div>
+
+            {latest && latest.faceVerified && (
+              <div className="mt-4 rounded-2xl bg-blue-50 border border-blue-100 p-3 text-sm">
+                <p className="font-bold text-blue-900">AI Verified Visitor</p>
+                <p className="text-slate-600">Face Match: {latest.faceConfidence} • Risk Score: {latest.riskScore}%</p>
+              </div>
+            )}
+
+            {latest && ["approved", "inside"].includes(latest.status) && (
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <Button onClick={callVisitor} variant="ghost" className="py-2 text-sm">
+                  <PhoneCall size={15} /> Call Visitor
+                </Button>
+                <Button onClick={wrongEntry} variant="danger" className="py-2 text-sm">
+                  Wrong Entry
+                </Button>
+              </div>
+            )}
+
+            {latest && ["exited", "auto closed", "wrong entry"].includes(latest.status) && (
+              <div className="grid grid-cols-1 gap-2 mt-4">
+                <Button onClick={callVisitor} variant="ghost" className="py-2 text-sm">
+                  <PhoneCall size={15} /> Call Visitor
+                </Button>
+              </div>
+            )}
+
+            {activeVisitor?.status === "pending" && <Button onClick={() => setShowPopup(true)} className="w-full mt-4">Review Visitor Request</Button>}
+          </Card>
+
+          <Card className="mt-4 p-4">
+            <h3 className="font-black text-slate-950">Resident Live Feed</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {visitorHistory.length ? visitorHistory.slice(0, 3).map((v) => (
+                <div key={v.id}>• {v.name}: {residentDisplayStatus(v.status)}{v.entryTime !== "--" ? ` • Entry ${v.entryTime}` : ""}{v.exitTime !== "--" ? ` • Exit ${v.exitTime}` : ""}</div>
+              )) : <p>No visitor activity yet.</p>}
+            </div>
+          </Card>
+        </div>
+
+        <div className="shrink-0 bg-slate-950 border-t border-slate-800 px-3 py-3 flex justify-around text-slate-300 shadow-2xl">
+          {[[Home, "dashboard", "Home"], [UserCheck, "visitor", "Visitors"], [Wallet, "bills", "Bills"], [MessageSquareWarning, "complaints", "Complaints"], [UserRound, "profile", "Profile"]].map(([Icon, target, label], i) => (
+            <button key={target} onClick={() => target !== "visitor" ? setScreen(target) : activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} className="flex flex-col items-center gap-1 min-w-12">
+              <Icon size={22} className={i === 0 ? "text-blue-400" : "text-slate-300"} />
+              <span className={`text-[10px] font-semibold ${i === 0 ? "text-blue-400" : "text-slate-300"}`}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence>
+          {showPopup && activeVisitor?.status === "pending" && (
+            <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }} className="absolute inset-x-4 top-6 rounded-3xl bg-white shadow-2xl border-2 border-blue-100 p-5 z-40">
+              <div className="flex justify-between"><p className="text-xs font-bold text-blue-600 uppercase tracking-wide">New Visitor Notification</p><button onClick={() => setShowPopup(false)}><X size={18} /></button></div>
+              <h3 className="text-xl font-black mt-2">{activeVisitor.name}</h3>
+              <p className="text-sm text-slate-500 mt-1">{activeVisitor.purpose} • {activeVisitor.flat} • {activeVisitor.requestTime}</p>
+              <div className="grid grid-cols-3 gap-2 mt-5">
+                <Button onClick={approve} variant="success" className="py-3">Approve</Button>
+                <Button onClick={reject} variant="danger" className="py-3">Reject</Button>
+                <Button onClick={callVisitor} variant="ghost" className="py-3"><PhoneCall size={17} /></Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </PhoneShell>
+  );
+}
+
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors, setKnownVisitors, resetSerial, addLog, notify }) {
+  const [screen, setScreen] = useState("login");
+  const [visitorForm, setVisitorForm] = useState({
+    name: "Ramesh Kumar",
+    mobile: "9998887776",
+    flat: "A-1204",
+    purpose: "Food Delivery",
+    gate: "Main Gate",
+  });
+  const [vehicleForm, setVehicleForm] = useState({
+    number: "MH 12 AB 4587",
+    flat: "B-804",
+    purpose: "Guest Parking",
+    gate: "Main Gate",
+  });
+  const [autoCloseSeconds, setAutoCloseSeconds] = useState(40);
+
+  useEffect(() => {
+    setScreen("login");
+    setActiveVisitor(null);
+  }, [resetSerial]);
+  const normalizedVisitorMobile = normalizeMobile(visitorForm.mobile);
+  const knownProfile =
+    normalizedVisitorMobile.length === 10 &&
+    knownVisitors?.[normalizedVisitorMobile]?.completedProfile === true
+      ? knownVisitors[normalizedVisitorMobile]
+      : undefined;
+
+  const isCurrentDraftVisitor =
+    activeVisitor?.status === "draft" &&
+    normalizeMobile(activeVisitor?.mobile) === normalizedVisitorMobile;
+
+  const showCurrentFaceCard =
+    activeVisitor?.photoCaptured === true &&
+    isCurrentDraftVisitor;
+
+  const applyKnownVisitorProfile = () => {
+    const profile = knownProfile;
+    if (!profile) {
+      notify("No saved visitor profile found for this mobile");
+      return;
+    }
+
+    const updatedDraft = {
+      id: Date.now(),
+      name: profile.name || visitorForm.name,
+      mobile: profile.mobile || normalizeMobile(visitorForm.mobile),
+      flat: profile.flat || visitorForm.flat,
+      purpose: profile.purpose || visitorForm.purpose,
+      gate: profile.gate || visitorForm.gate,
+      status: "draft",
+      requestTime: "11:45 AM",
+      approvedBy: "--",
+      approvedAt: "--",
+      entryTime: "--",
+      exitTime: "--",
+      passId: `SG-${Date.now().toString().slice(-5)}`,
+      photoCaptured: true,
+      faceVerified: true,
+      faceConfidence: profile.faceConfidence || "98%",
+      faceType: "Known Visitor",
+      riskScore: profile.riskScore || 10,
+      riskLabel: profile.riskLabel || "Low Risk",
+      repeatVisitor: true,
+    };
+
+    setVisitorForm((prev) => ({
+      ...prev,
+      name: updatedDraft.name,
+      flat: updatedDraft.flat,
+      purpose: updatedDraft.purpose,
+      gate: updatedDraft.gate,
+    }));
+
+    setActiveVisitor(updatedDraft);
+    addLog(`Known visitor auto-fetched by mobile ${normalizeMobile(visitorForm.mobile)}: ${updatedDraft.name}`);
+    notify("Known visitor profile auto-fetched");
+  };
+
+  const saveCompletedKnownVisitorProfile = (visitor) => {
+    const mobileKey = normalizeMobile(visitor?.mobile);
+    if (!visitor?.faceVerified || mobileKey.length !== 10) return;
+
+    setKnownVisitors((prev) => ({
+      ...prev,
+      [mobileKey]: {
+        name: visitor.name,
+        mobile: mobileKey,
+        flat: visitor.flat,
+        purpose: visitor.purpose,
+        gate: visitor.gate,
+        faceConfidence: visitor.faceConfidence || "98%",
+        faceType: "Known Visitor",
+        riskScore: 10,
+        riskLabel: "Low Risk",
+        completedProfile: true,
+      },
+    }));
+
+    addLog(`Known visitor profile saved for ${visitor.name} (${mobileKey})`);
+  };
+
+  useEffect(() => {
+    if (screen === "visitorPass" && activeVisitor?.status === "inside" && activeVisitor?.purpose.toLowerCase().includes("delivery")) {
+      setAutoCloseSeconds(40);
+      const timer = setInterval(() => {
+        setAutoCloseSeconds((sec) => {
+          if (sec <= 1) {
+            clearInterval(timer);
+            const updated = { ...activeVisitor, status: "auto closed", exitTime: "12:25 PM" };
+            setActiveVisitor(updated);
+            saveVisitor(updated);
+            saveCompletedKnownVisitorProfile(updated);
+            addLog(`${updated.name} auto closed by system after demo timer`);
+            notify("Delivery auto closed");
+            return 0;
+          }
+          return sec - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [screen, activeVisitor?.id, activeVisitor?.status]);
+
+  const createVisitor = () => {
+    const profile = knownProfile;
+    const draftSource =
+      activeVisitor?.status === "draft" &&
+      normalizeMobile(activeVisitor?.mobile) === normalizeMobile(visitorForm.mobile)
+        ? activeVisitor
+        : null;
+
+    const hasCapturedFace = draftSource?.photoCaptured === true || !!profile;
+
+    const visitor = {
+      id: Date.now(),
+      ...visitorForm,
+      name: profile?.name || visitorForm.name,
+      flat: profile?.flat || visitorForm.flat,
+      purpose: profile?.purpose || visitorForm.purpose,
+      gate: profile?.gate || visitorForm.gate,
+      photoCaptured: hasCapturedFace,
+      faceVerified: hasCapturedFace,
+      faceConfidence: hasCapturedFace ? (draftSource?.faceConfidence || profile?.faceConfidence || "98%") : "--",
+      faceType: profile ? "Known Visitor" : hasCapturedFace ? (draftSource?.faceType || "First Time Visitor") : "Not Scanned",
+      riskScore: profile ? (profile.riskScore || 12) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
+      riskLabel: profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
+      repeatVisitor: !!profile,
+      status: "pending",
+      requestTime: "11:45 AM",
+      approvedBy: "--",
+      approvedAt: "--",
+      entryTime: "--",
+      exitTime: "--",
+      passId: `SG-${Date.now().toString().slice(-5)}`,
+    };
+
+    setActiveVisitor(visitor);
+    saveVisitor(visitor);
+    addLog(`Guard sent visitor approval request for ${visitor.name} (${visitor.flat})${profile ? " • Known visitor auto-fetched" : ""}`);
+    notify(profile ? "Known visitor request sent" : "Approval request sent");
+    setScreen("waiting");
+  };
+
+  const markEntry = () => {
+    if (!activeVisitor) return;
+    const updated = { ...activeVisitor, status: "inside", entryTime: "11:47 AM" };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    addLog(`${updated.name} entered society at ${updated.gate}`);
+    setScreen("visitorPass");
+  };
+
+  const markExit = () => {
+    if (!activeVisitor) return;
+    const updated = { ...activeVisitor, status: "exited", exitTime: "12:25 PM" };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    saveCompletedKnownVisitorProfile(updated);
+    addLog(`${updated.name} exited society at ${updated.gate}`);
+    notify("Visitor exit marked");
+  };
+
+  const autoCloseNow = () => {
+    if (!activeVisitor) return;
+    const updated = { ...activeVisitor, status: "auto closed", exitTime: "12:25 PM" };
+    setActiveVisitor(updated);
+    saveVisitor(updated);
+    saveCompletedKnownVisitorProfile(updated);
+    addLog(`${updated.name} auto closed manually for demo`);
+    notify("Visitor auto closed");
+  };
+
+  const captureFaceDemo = () => {
+    const mobileKey = normalizeMobile(visitorForm.mobile);
+    const draft = {
+      id: Date.now(),
+      name: visitorForm.name,
+      mobile: mobileKey,
+      flat: visitorForm.flat,
+      purpose: visitorForm.purpose,
+      gate: visitorForm.gate,
+      status: "draft",
+      requestTime: "11:45 AM",
+      approvedBy: "--",
+      approvedAt: "--",
+      entryTime: "--",
+      exitTime: "--",
+      passId: `SG-${Date.now().toString().slice(-5)}`,
+      photoCaptured: true,
+      faceVerified: true,
+      faceConfidence: "98%",
+      faceType: "First Time Visitor",
+      riskScore: 30,
+      riskLabel: "Medium Risk",
+    };
+
+    setActiveVisitor(draft);
+    addLog(`AI Face Recognition completed for ${draft.name}: 98% confidence, Medium Risk`);
+    notify("Face captured and verified");
+  };
+
+  const createVehicle = () => {
+    const vehicle = {
+      id: Date.now(),
+      ...vehicleForm,
+      status: "in",
+      inTime: "11:10 AM",
+      outTime: "--",
+      passId: `VH-${Date.now().toString().slice(-5)}`,
+    };
+    setActiveVehicle(vehicle);
+    saveVehicle(vehicle);
+    addLog(`Vehicle ${vehicle.number} entered for ${vehicle.flat}`);
+    notify("Vehicle pass created");
+    setScreen("vehiclePass");
+  };
+
+  const markVehicleOut = () => {
+    if (!activeVehicle) return;
+    const updated = { ...activeVehicle, status: "out", outTime: "12:05 PM" };
+    setActiveVehicle(updated);
+    saveVehicle(updated);
+    addLog(`Vehicle ${updated.number} marked OUT`);
+    notify("Vehicle exit marked");
+  };
+
+  if (screen === "login") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <Logo dark />
+        <div className="mt-12"><h2 className="text-2xl font-black">Security Login</h2><p className="text-slate-400 text-sm mt-1">Start your gate duty securely.</p></div>
+        <div className="mt-8 space-y-4">
+          <input className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 outline-none" defaultValue="Suresh Yadav" />
+          <input className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 outline-none" defaultValue="Main Gate" />
+          <Button onClick={() => setScreen("dashboard")} className="w-full" variant="success">Start Gate Duty</Button>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "add") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <HeaderBack title="Add Visitor" subtitle="Create approval request" dark onBack={() => setScreen("dashboard")} />
+        <div className="space-y-3">
+          <DarkTextInput label="Visitor Name" value={visitorForm.name} onChange={(v) => setVisitorForm((p) => ({ ...p, name: v }))} />
+          <DarkTextInput label="Mobile" value={visitorForm.mobile} onChange={(v) => setVisitorForm((p) => ({ ...p, mobile: v }))} />
+
+          {knownProfile?.completedProfile && (
+            <Card className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 border-emerald-400/30 text-white shadow-xl">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-black text-emerald-300">Known Visitor Found</p>
+                  <p className="text-sm text-slate-300">{knownProfile.name} • {knownProfile.flat}</p>
+                  <p className="text-xs text-cyan-300 mt-1">Face Match: {knownProfile.faceConfidence} • No recapture needed</p>
+                </div>
+                <Button onClick={applyKnownVisitorProfile} variant="success" className="py-2 px-3 text-xs">
+                  Auto Fetch
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          <DarkTextInput label="Flat No." value={visitorForm.flat} onChange={(v) => setVisitorForm((p) => ({ ...p, flat: v }))} />
+          <DarkTextInput label="Purpose" value={visitorForm.purpose} onChange={(v) => setVisitorForm((p) => ({ ...p, purpose: v }))} />
+          <button onClick={captureFaceDemo} className="rounded-2xl border border-dashed border-slate-700 p-6 text-center text-slate-400 w-full hover:border-cyan-400/60 hover:bg-slate-900 transition">
+            <div className="flex items-center justify-center gap-2"><Camera size={20} /> Capture Visitor Image</div>
+          </button>
+
+          {showCurrentFaceCard && (
+            <Card className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 border-cyan-400/30 text-white shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">
+                  {initials(activeVisitor?.name || visitorForm.name)}
+                </div>
+                <div>
+                  <p className="font-black">AI Face Recognition</p>
+                  <p className="text-sm text-slate-300">Visitor image captured</p>
+                  <p className="text-sm text-cyan-300 font-bold mt-1">Face Match: {activeVisitor?.faceConfidence || "98%"}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Status</p>
+                  <b className="text-emerald-300">Verified</b>
+                </div>
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Type</p>
+                  <b className="text-cyan-300">{activeVisitor?.faceType || "First Time Visitor"}</b>
+                </div>
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Risk</p>
+                  <b className={activeVisitor?.riskScore > 20 ? "text-amber-300" : "text-emerald-300"}>
+                    {activeVisitor?.riskScore || 30}%
+                  </b>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Button onClick={createVisitor} className="w-full" variant="success">Send Approval Request</Button>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "waiting") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 flex flex-col justify-center text-center">
+        {activeVisitor?.status === "approved" ? (
+          <>
+            <CheckCircle2 className="mx-auto text-emerald-400" size={82} />
+            <h2 className="text-3xl font-black mt-5">Entry Approved</h2>
+            <p className="text-slate-400 mt-2">Gate Pass ID: {activeVisitor.passId}</p>
+            <Card className="p-4 mt-7 text-left bg-slate-900 border-slate-800 text-white">
+              <p className="font-bold">{activeVisitor.name}</p>
+              <p className="text-sm text-slate-400">{activeVisitor.purpose} • {activeVisitor.flat}</p>
+            </Card>
+            <Button onClick={markEntry} className="mt-8 w-full" variant="success">Allow Entry & View Pass</Button>
+          </>
+        ) : activeVisitor?.status === "wrong entry" ? (
+          <>
+            <AlertTriangle className="mx-auto text-red-400" size={82} />
+            <h2 className="text-3xl font-black mt-5">Wrong Entry Alert</h2>
+            <p className="text-slate-400 mt-2">Resident reported this visitor as wrong entry.</p>
+            <Card className="p-4 mt-7 text-left bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/30 text-white shadow-xl shadow-red-950/30">
+              <p className="font-bold">{activeVisitor.name}</p>
+              <p className="text-sm text-red-200">{activeVisitor.purpose} • {activeVisitor.flat}</p>
+            </Card>
+            <div className="grid grid-cols-2 gap-3 mt-8">
+              <Button onClick={() => setScreen("visitorPass")} variant="navy">View Pass</Button>
+              <Button onClick={() => setScreen("dashboard")} variant="danger">Close</Button>
+            </div>
+          </>
+        ) : activeVisitor?.status === "rejected" ? (
+          <>
+            <X className="mx-auto text-red-400" size={82} />
+            <h2 className="text-3xl font-black mt-5">Entry Rejected</h2>
+            <p className="text-slate-400 mt-2">Resident rejected the visitor request.</p>
+            <Button onClick={() => setScreen("dashboard")} className="mt-8 w-full" variant="danger">Close Request</Button>
+          </>
+        ) : (
+          <>
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} className="mx-auto h-24 w-24 rounded-full border-4 border-slate-700 border-t-cyan-400" />
+            <h2 className="text-2xl font-black mt-7">Waiting for Approval</h2>
+            <p className="text-slate-400 mt-2">Request sent to resident of {visitorForm.flat}.</p>
+            <Button onClick={() => notify("Calling resident...")} className="mt-8 w-full bg-gradient-to-r from-slate-800 to-slate-900 border border-cyan-400/20 text-white shadow-lg" variant="navy"><PhoneCall size={18} /> Call Resident</Button>
+          </>
+        )}
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "visitorPass") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <HeaderBack title="Visitor Pass" subtitle="Approved visitor details" dark onBack={() => setScreen("dashboard")} />
+        {activeVisitor && (
+          <>
+            <Card className="p-5 bg-slate-900 border-slate-800 text-white">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">{initials(activeVisitor.name)}</div>
+                <div>
+                  <h3 className="text-xl font-black">{activeVisitor.name}</h3>
+                  <p className="text-slate-400 text-sm">{activeVisitor.purpose} • {activeVisitor.flat}</p>
+                  <span className={`inline-block mt-2 text-xs px-3 py-1 rounded-full ${activeVisitor.status === "inside" ? "bg-emerald-500/20 text-emerald-300" : activeVisitor.status === "wrong entry" ? "bg-red-500/20 text-red-300" : activeVisitor.status === "auto closed" ? "bg-purple-500/20 text-purple-300" : "bg-slate-700 text-slate-300"}`}>{activeVisitor.status}</span>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Approved By</p><b>{activeVisitor.approvedBy}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Gate</p><b>{activeVisitor.gate}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Entry</p><b>{activeVisitor.entryTime}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Exit</p><b>{activeVisitor.exitTime}</b></div>
+              </div>
+              <div className="mt-5 rounded-3xl bg-white p-5 text-center text-slate-950">
+                <QrCode className="mx-auto" size={82} />
+                <p className="font-black mt-2">{activeVisitor.passId}</p>
+                <p className="text-xs text-slate-500">Digital visitor pass</p>
+              </div>
+            </Card>
+
+            <Card className="mt-5 p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 border-blue-400/30 text-white shadow-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-black text-white">AI Verification</p>
+                  <p className="text-sm text-slate-300">Face recognition and visitor risk analysis</p>
+                </div>
+                <div className="h-14 w-14 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                  <ShieldCheck className="text-cyan-300" size={30} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Face Match</p>
+                  <b className="text-cyan-300">{activeVisitor.faceVerified ? (activeVisitor.faceConfidence || "98%") : "--"}</b>
+                </div>
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Status</p>
+                  <b className={activeVisitor.faceVerified ? "text-emerald-300" : "text-amber-300"}>{activeVisitor.faceVerified ? "Verified" : "Pending"}</b>
+                </div>
+                <div className="rounded-2xl bg-slate-950 p-3">
+                  <p className="text-slate-500">Risk</p>
+                  <b className={activeVisitor.riskScore > 70 ? "text-red-300" : activeVisitor.riskScore > 30 ? "text-amber-300" : "text-emerald-300"}>{activeVisitor.faceVerified ? (activeVisitor.riskScore || 12) : (activeVisitor.riskScore || 30)}%</b>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 mt-3">AI Result: {activeVisitor.faceVerified ? (activeVisitor.faceType || "Known Visitor") : "Not Scanned"} • {activeVisitor.faceVerified ? (activeVisitor.riskLabel || "Low Risk") : (activeVisitor.riskLabel || "Medium Risk")}</p>
+            </Card>
+
+            {activeVisitor.status === "inside" && activeVisitor.purpose.toLowerCase().includes("delivery") && (
+              <Card className="mt-5 p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 border-amber-400/30 text-white shadow-xl shadow-amber-950/30">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-black text-white">Delivery Auto-Close Timer</p>
+                    <p className="text-sm text-slate-300">Demo auto-close triggers in 40 seconds.</p>
+                  </div>
+                  <div className="h-14 w-14 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-xl font-black shadow-lg">{autoCloseSeconds}s</div>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-slate-800 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-amber-300 to-orange-400 transition-all" style={{ width: `${(autoCloseSeconds / 40) * 100}%` }} />
+                </div>
+              </Card>
+            )}
+
+            {activeVisitor.status === "inside" ? (
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                <Button onClick={markExit} variant="success"><LogOut size={16} /> Mark Exit</Button>
+                <Button onClick={autoCloseNow} variant="ghost">Auto Close Now</Button>
+              </div>
+            ) : (
+              <GuardStatusCard status={activeVisitor.status} exitTime={activeVisitor.exitTime} />
+            )}
+          </>
+        )}
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "vehicle") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <HeaderBack title="Vehicle Entry" subtitle="Create vehicle pass" dark onBack={() => setScreen("dashboard")} />
+        <div className="space-y-3">
+          <DarkTextInput label="Vehicle Number" value={vehicleForm.number} onChange={(v) => setVehicleForm((p) => ({ ...p, number: v }))} />
+          <DarkTextInput label="Flat No." value={vehicleForm.flat} onChange={(v) => setVehicleForm((p) => ({ ...p, flat: v }))} />
+          <DarkTextInput label="Purpose" value={vehicleForm.purpose} onChange={(v) => setVehicleForm((p) => ({ ...p, purpose: v }))} />
+          <Button onClick={createVehicle} className="w-full" variant="success">Create Vehicle Pass</Button>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "vehiclePass") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <HeaderBack title="Vehicle Pass" subtitle="Vehicle in/out details" dark onBack={() => setScreen("dashboard")} />
+        {activeVehicle && (
+          <>
+            <Card className="p-5 bg-slate-900 border-slate-800 text-white">
+              <Car className="text-cyan-300" size={42} />
+              <h3 className="text-2xl font-black mt-3">{activeVehicle.number}</h3>
+              <p className="text-slate-400 text-sm">{activeVehicle.purpose} • {activeVehicle.flat}</p>
+              <span className={`inline-block mt-3 text-xs px-3 py-1 rounded-full ${activeVehicle.status === "out" ? "bg-slate-700 text-slate-300" : "bg-emerald-500/20 text-emerald-300"}`}>{activeVehicle.status === "out" ? "out" : "inside"}</span>
+              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">In Time</p><b>{activeVehicle.inTime}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Out Time</p><b>{activeVehicle.outTime}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Gate</p><b>{activeVehicle.gate}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Pass ID</p><b>{activeVehicle.passId}</b></div>
+              </div>
+              <div className="mt-5 rounded-3xl bg-white p-5 text-center text-slate-950">
+                <QrCode className="mx-auto" size={82} />
+                <p className="font-black mt-2">{activeVehicle.passId}</p>
+                <p className="text-xs text-slate-500">Vehicle QR pass</p>
+              </div>
+            </Card>
+
+            {activeVehicle.status === "in" ? (
+              <Button onClick={markVehicleOut} className="w-full mt-5" variant="success"><LogOut size={16} /> Mark Vehicle Out</Button>
+            ) : (
+              <VehicleStatusCard outTime={activeVehicle.outTime} />
+            )}
+          </>
+        )}
+      </div>
+    </PhoneShell>
+  );
+
+  if (screen === "qr") return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 flex flex-col justify-center text-center">
+        <QrCode className="mx-auto text-cyan-300" size={110} />
+        <h2 className="text-2xl font-black mt-6">QR Scanner</h2>
+        <p className="text-slate-400 mt-2">Demo scanner for pre-approved guests.</p>
+        <Button onClick={() => { addLog("QR pass scanned for Priya Sharma guest"); notify("QR pass verified"); setScreen("dashboard"); }} className="w-full mt-8" variant="success">Scan Demo QR</Button>
+        <Button onClick={() => setScreen("dashboard")} className="w-full mt-3" variant="ghost">Cancel</Button>
+      </div>
+    </PhoneShell>
+  );
+
+  return (
+    <PhoneShell dark>
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+        <div className="flex justify-between items-center">
+          <div><p className="text-emerald-400 text-sm">Online</p><h2 className="text-2xl font-black">Main Gate</h2><p className="text-xs text-slate-400">Suresh Yadav • 8 AM – 8 PM</p></div>
+          <ShieldCheck className="text-cyan-300" size={38} />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-8">
+          {[[Users, "Add Visitor", () => { setActiveVisitor(null); setScreen("add"); }], [Truck, "Delivery", () => { setActiveVisitor(null); setScreen("add"); }], [Car, "Vehicle", () => setScreen("vehicle")], [QrCode, "Scan QR", () => setScreen("qr")], [PhoneCall, "Call Resident", () => notify("Calling resident...")], [Siren, "Emergency", () => { addLog("Guard triggered emergency alert"); notify("Emergency alert sent"); }]].map(([Icon, title, onClick]) => (
+            <button key={title} onClick={onClick} className="rounded-3xl bg-slate-900 border border-slate-800 p-5 h-28 text-left active:scale-[0.98]">
+              <Icon className="text-cyan-300" />
+              <p className="font-bold mt-4">{title}</p>
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-6">
+          <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Visitor Status</p><p className="text-xl font-black mt-1">{activeVisitor?.status || "none"}</p></Card>
+          <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Vehicle</p><p className="text-xl font-black mt-1">{activeVehicle?.status || "none"}</p></Card>
+        </div>
+        {activeVisitor && ["approved", "inside", "exited", "auto closed", "wrong entry"].includes(activeVisitor.status) && (
+          <Button onClick={() => activeVisitor.status === "approved" ? setScreen("waiting") : setScreen("visitorPass")} className="w-full mt-5" variant="success">
+            {activeVisitor.status === "approved" ? "Allow Entry" : "View Visitor Pass"}
+          </Button>
+        )}
+        {activeVehicle && <Button onClick={() => setScreen("vehiclePass")} className="w-full mt-4" variant="ghost">View Vehicle Pass</Button>}
+      </div>
+    </PhoneShell>
+  );
+}
+
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, logs, notify, billPaid }) {
+  const [section, setSection] = useState("dashboard");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showResidentForm, setShowResidentForm] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [aiAnswer, setAiAnswer] = useState("Click any AI question to see the answer here.");
+  const [newResident, setNewResident] = useState({ flat: "D-1101", name: "Neha Gupta", type: "Owner", due: "₹0", status: "Active" });
+  const [editingResident, setEditingResident] = useState(null);
+  const [residents, setResidents] = useState([
+    { flat: "A-1204", name: "Jagmeet Singh", type: "Owner", due: "₹4,500", status: "Active" },
+    { flat: "B-804", name: "Priya Sharma", type: "Tenant", due: "₹4,500", status: "Active" },
+    { flat: "C-502", name: "Rohit Verma", type: "Owner", due: "₹0", status: "Active" },
+  ]);
+
+  const visitorsToday = 42 + visitorHistory.length;
+  const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
+  const pendingAmount = billPaid ? "₹3.65L" : "₹3.70L";
+  const overdueFlats = billPaid ? "37" : "38";
+  const menu = [["dashboard", LayoutDashboard, "Dashboard"], ["residents", Building2, "Residents"], ["visitors", Users, "Visitors"], ["billing", ReceiptText, "Billing"], ["complaints", ClipboardList, "Complaints"], ["reports", BarChart3, "Reports"], ["ai", Bot, "AI Copilot"], ["settings", Settings, "Settings"]];
+  const SectionTitle = ({ title, sub }) => <div className="mb-5"><h2 className="text-2xl font-black text-slate-950">{title}</h2><p className="text-sm text-slate-500">{sub}</p></div>;
+
+  const filteredResidents = residents
+    .map((r) => r.flat === "A-1204" ? { ...r, due: billPaid ? "₹0" : "₹4,500" } : r)
+    .filter((r) => `${r.flat} ${r.name} ${r.type} ${r.due} ${r.status}`.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const updateVisitor = (updated) => {
+    setActiveVisitor(updated);
+    setVisitorHistory((prev) => [updated, ...prev.filter((v) => v.id !== updated.id)]);
+  };
+  const updateVehicle = (updated) => {
+    setActiveVehicle(updated);
+    setVehicleHistory((prev) => [updated, ...prev.filter((v) => v.id !== updated.id)]);
+  };
+
+  return (
+    <div className="w-full max-w-[1180px] rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 bg-white min-h-[640px] flex flex-col lg:flex-row mx-auto">
+      <aside className="lg:w-64 bg-slate-950 text-white p-4 lg:p-5">
+        <div className="flex items-center justify-between"><Logo dark /><Menu className="lg:hidden text-white" /></div>
+        <nav className="mt-5 lg:mt-10 flex lg:block overflow-x-auto gap-2 lg:space-y-2 pb-2 sg-scroll">
+          {menu.map(([key, Icon, text]) => (
+            <button key={key} onClick={() => setSection(key)} className={`flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 transition ${section === key ? (key === "ai" ? "bg-gradient-to-r from-blue-600 to-cyan-500 shadow-lg shadow-cyan-900/30" : "bg-blue-600") : "text-slate-300 hover:bg-slate-900"}`}>
+              {key === "ai" ? (
+                <span className="relative flex items-center">
+                  <Sparkles size={18} className="text-cyan-200 animate-pulse" />
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-cyan-300 animate-ping" />
+                </span>
+              ) : (
+                <Icon size={18} />
+              )}{text}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="flex-1 bg-slate-50 p-4 sm:p-6 overflow-y-auto sg-scroll max-h-[760px] lg:max-h-none">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div><h1 className="text-2xl sm:text-3xl font-black text-slate-950">Green Meadows Society</h1><p className="text-slate-500">Admin ERP Dashboard</p></div>
+          <div className="flex gap-3">
+            <div className="rounded-2xl bg-white border border-slate-100 px-4 py-3 flex items-center gap-2 text-slate-500">
+              <Search size={18} /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search residents..." className="outline-none bg-transparent w-36 text-sm" />
+            </div>
+            <div className="relative">
+              <button onClick={() => setShowNotifications(!showNotifications)} className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center relative">
+                <Bell size={20} /><span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">3</span>
+              </button>
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-white border border-slate-100 shadow-2xl p-3 z-50">
+                  <p className="font-black text-slate-950 mb-2">Notifications</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="rounded-xl bg-blue-50 p-3">Visitor status: {activeVisitor?.status || "none"}</div>
+                    <div className="rounded-xl bg-emerald-50 p-3">Payment status: {billPaid ? "paid" : "pending"}</div>
+                    <div className="rounded-xl bg-amber-50 p-3">Vehicle status: {activeVehicle?.status || "none"}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {section === "dashboard" && (
+          <div className="mt-7">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Pending Complaints", "8"], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
+                <Card key={title} className="p-4"><p className="text-xs text-slate-500">{title}</p><p className="text-2xl font-black text-slate-950 mt-2">{value}</p></Card>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
+              <Card className="p-5 xl:col-span-2 h-64">
+                <div className="flex justify-between"><h3 className="font-black text-slate-950">Visitor Trend</h3><span className="text-xs text-emerald-600 font-bold">Live</span></div>
+                <div className="h-44 mt-5 flex items-end gap-3">
+                  {[45, 70, 52, 88, 62, 95, activeVisitor ? 78 : 66].map((h, i) => <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${h}%` }} className="flex-1 rounded-t-xl bg-gradient-to-t from-blue-600 to-cyan-300" />)}
+                </div>
+              </Card>
+              <Card className="p-5 h-64">
+                <h3 className="font-black text-slate-950">Billing Collection</h3>
+                <div className="mt-7 h-32 w-32 mx-auto rounded-full border-[18px] border-blue-600 flex items-center justify-center"><span className="font-black text-xl">70%</span></div>
+                <p className="text-center text-sm text-slate-500 mt-4">{collectedAmount} collected of ₹12.4L</p>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
+              <Card className="p-5">
+                <h3 className="font-black text-slate-950">AI Society Insights</h3>
+                <div className="mt-4 space-y-3">
+                  {activeVisitor?.status === "wrong entry" && (
+                    <div className="rounded-2xl bg-red-50 p-3 border border-red-100">
+                      <p className="font-bold text-sm text-red-900">Wrong Entry Alert</p>
+                      <p className="text-xs text-slate-500 mt-1">Resident A-1204 reported incorrect visitor entry. Guard verification required.</p>
+                    </div>
+                  )}
+                  <div className="rounded-2xl bg-blue-50 p-3"><p className="font-bold text-sm text-blue-900">Lifecycle sync active</p><p className="text-xs text-slate-500 mt-1">Visitor, resident, guard and ERP use same state.</p></div>
+                  <div className="rounded-2xl bg-emerald-50 p-3"><p className="font-bold text-sm text-emerald-900">Billing recovery</p><p className="text-xs text-slate-500 mt-1">A-1204 status: {billPaid ? "Paid" : "Pending"}.</p></div>
+                </div>
+              </Card>
+              <Card className="p-5">
+                <h3 className="font-black text-slate-950">Live Entry Logs</h3>
+                <div className="mt-4 space-y-3">
+                  {visitorHistory.slice(0, 2).map((v) => (
+                    <div key={v.id} className="rounded-2xl bg-blue-50 p-3">
+                      <p className="font-bold text-sm">{v.name} • {v.flat}</p>
+                      <p className="text-xs text-slate-500">{v.purpose} • {v.status} • Entry {v.entryTime} • Exit {v.exitTime}</p>
+                    </div>
+                  ))}
+                  {!visitorHistory.length && <p className="text-slate-500 text-sm">No visitor logs yet.</p>}
+                </div>
+              </Card>
+              <Card className="p-5">
+                <h3 className="font-black text-slate-950">System Activity</h3>
+                <div className="mt-4 space-y-3">
+                  {logs.slice(-6).reverse().map((log, i) => <div key={i} className="flex gap-3 text-sm"><Clock size={16} className="text-blue-600 mt-.5" /><span className="text-slate-600">{log}</span></div>)}
+                  {!logs.length && <p className="text-slate-500 text-sm">Start visitor flow from Guard App.</p>}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {section === "residents" && (
+          <div className="mt-7">
+            <SectionTitle title="Resident Management" sub="Manage flats, owners, tenants and dues" />
+            <Button onClick={() => setShowResidentForm(true)}><UserPlus size={18} /> Add Resident</Button>
+            {showResidentForm && (
+              <Card className="mt-4 p-5 border-blue-200 shadow-md">
+                <div className="flex items-center justify-between mb-4"><h3 className="font-black text-slate-950">Add New Resident</h3><button onClick={() => setShowResidentForm(false)}><X size={18} /></button></div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <input className="rounded-xl border p-3" value={newResident.flat} onChange={(e) => setNewResident({ ...newResident, flat: e.target.value })} placeholder="Flat No." />
+                  <input className="rounded-xl border p-3" value={newResident.name} onChange={(e) => setNewResident({ ...newResident, name: e.target.value })} placeholder="Resident Name" />
+                  <select className="rounded-xl border p-3" value={newResident.type} onChange={(e) => setNewResident({ ...newResident, type: e.target.value })}><option>Owner</option><option>Tenant</option></select>
+                  <input className="rounded-xl border p-3" value={newResident.due} onChange={(e) => setNewResident({ ...newResident, due: e.target.value })} placeholder="Due Amount" />
+                  <select className="rounded-xl border p-3" value={newResident.status} onChange={(e) => setNewResident({ ...newResident, status: e.target.value })}><option>Active</option><option>Inactive</option></select>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <Button onClick={() => { setResidents((prev) => [...prev, newResident]); setShowResidentForm(false); notify(`Resident ${newResident.name} added`); }} variant="success">Save Resident</Button>
+                  <Button onClick={() => setShowResidentForm(false)} variant="ghost">Cancel</Button>
+                </div>
+              </Card>
+            )}
+            <Card className="mt-4 p-4 overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
+                <thead><tr className="text-left text-slate-500 border-b"><th className="py-3">Flat No.</th><th>Resident Name</th><th>Category</th><th>Due Amount</th><th>Status</th><th className="text-right">Action</th></tr></thead>
+                <tbody>{filteredResidents.map((r, i) => (
+                  <tr key={`${r.flat}-${i}`} className="border-b last:border-0">
+                    <td className="py-3 font-bold">{r.flat}</td><td>{r.name}</td><td>{r.type}</td><td>{r.due}</td><td><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full text-xs">{r.status}</span></td>
+                    <td className="text-right"><button onClick={() => setEditingResident({ ...r })} className="text-blue-600 font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-50 mr-2">Edit</button><button onClick={() => setResidents((prev) => prev.filter((x) => x.flat !== r.flat))} className="text-red-600 font-bold text-xs px-3 py-2 rounded-xl hover:bg-red-50">Delete</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              {!filteredResidents.length && <p className="text-center text-slate-500 py-6">No resident found for “{searchTerm}”.</p>}
+            </Card>
+            {editingResident && (
+              <Card className="mt-4 p-5 border-cyan-200 shadow-md">
+                <div className="flex items-center justify-between mb-4"><h3 className="font-black text-slate-950">Edit Resident</h3><button onClick={() => setEditingResident(null)}><X size={18} /></button></div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <input className="rounded-xl border p-3 bg-slate-50" value={editingResident.flat} readOnly />
+                  <input className="rounded-xl border p-3" value={editingResident.name} onChange={(e) => setEditingResident({ ...editingResident, name: e.target.value })} />
+                  <select className="rounded-xl border p-3" value={editingResident.type} onChange={(e) => setEditingResident({ ...editingResident, type: e.target.value })}><option>Owner</option><option>Tenant</option></select>
+                  <input className="rounded-xl border p-3" value={editingResident.due} onChange={(e) => setEditingResident({ ...editingResident, due: e.target.value })} />
+                  <select className="rounded-xl border p-3" value={editingResident.status} onChange={(e) => setEditingResident({ ...editingResident, status: e.target.value })}><option>Active</option><option>Inactive</option></select>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <Button onClick={() => { setResidents((prev) => prev.map((r) => r.flat === editingResident.flat ? editingResident : r)); setEditingResident(null); notify("Resident updated"); }} variant="success">Save Changes</Button>
+                  <Button onClick={() => setEditingResident(null)} variant="ghost">Cancel</Button>
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {section === "visitors" && (
+          <div className="mt-7">
+            <SectionTitle title="Visitor & Vehicle Analytics" sub="Complete in/out lifecycle reports" />
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+              <Card className="p-4"><p className="text-xs text-slate-500">Visitors Today</p><p className="text-3xl font-black mt-1">{visitorsToday}</p></Card>
+              <Card className="p-4"><p className="text-xs text-slate-500">Current Visitor</p><p className="text-2xl font-black mt-1 capitalize">{activeVisitor?.status || "none"}</p></Card>
+              <Card className="p-4"><p className="text-xs text-slate-500">Active Vehicle</p><p className="text-2xl font-black mt-1 capitalize">{activeVehicle?.status || "none"}</p></Card>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              <Card className="p-4 overflow-x-auto">
+                <h3 className="font-black text-slate-950 mb-3">Visitor Table</h3>
+                <table className="w-full text-sm min-w-[760px]">
+                  <thead><tr className="text-left text-slate-500 border-b"><th className="py-3">Visitor</th><th>Flat</th><th>Purpose</th><th>Status</th><th>Entry</th><th>Exit</th><th>Action</th></tr></thead>
+                  <tbody>{visitorHistory.length ? visitorHistory.map((v) => (
+                    <tr key={v.id} className="border-b last:border-0">
+                      <td className="py-3 font-bold">{v.name}</td><td>{v.flat}</td><td>{v.purpose}</td><td><span className={`px-2 py-1 rounded-full text-xs ${visitorBadge(v.status)}`}>{v.status}</span></td><td>{v.entryTime}</td><td>{v.exitTime}</td>
+                      <td>{v.status === "inside" ? <button onClick={() => updateVisitor({ ...v, status: "exited", exitTime: "12:25 PM" })} className="text-blue-600 font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-50">Mark Exit</button> : <span className="text-slate-400 text-xs">Closed</span>}</td>
+                    </tr>
+                  )) : <tr><td colSpan="7" className="py-4 text-slate-500">No visitor records yet.</td></tr>}</tbody>
+                </table>
+              </Card>
+              <Card className="p-5">
+                <h3 className="font-black text-slate-950">Visitor History Timeline</h3>
+                <div className="mt-4 space-y-4">{visitorHistory.length ? visitorHistory.slice(0, 4).map((v) => (
+                  <div key={v.id} className="flex gap-3"><div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center"><Check size={16} /></div><div><p className="text-xs text-slate-500">{v.exitTime !== "--" ? v.exitTime : v.entryTime !== "--" ? v.entryTime : v.requestTime}</p><p className="font-bold text-slate-950">{v.name}</p><p className="text-sm text-slate-500">{v.purpose} • {v.flat} • {v.status}</p></div></div>
+                )) : <p className="text-slate-500 text-sm">No visitor history yet.</p>}</div>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mt-5">
+              <Card className="p-4 overflow-x-auto">
+                <h3 className="font-black text-slate-950 mb-3">Vehicle In/Out Report</h3>
+                <table className="w-full text-sm min-w-[680px]">
+                  <thead><tr className="text-left text-slate-500 border-b"><th className="py-3">Vehicle</th><th>Flat</th><th>Purpose</th><th>Status</th><th>In</th><th>Out</th><th>Action</th></tr></thead>
+                  <tbody>{vehicleHistory.length ? vehicleHistory.map((v) => (
+                    <tr key={v.id} className="border-b last:border-0">
+                      <td className="py-3 font-bold">{v.number}</td><td>{v.flat}</td><td>{v.purpose}</td><td>{v.status}</td><td>{v.inTime}</td><td>{v.outTime}</td>
+                      <td>{v.status === "in" ? <button onClick={() => updateVehicle({ ...v, status: "out", outTime: "12:05 PM" })} className="text-blue-600 font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-50">Mark Out</button> : <span className="text-slate-400 text-xs">Closed</span>}</td>
+                    </tr>
+                  )) : <tr><td colSpan="7" className="py-4 text-slate-500">No vehicle records yet.</td></tr>}</tbody>
+                </table>
+              </Card>
+              <Card className="p-5">
+                <h3 className="font-black text-slate-950">Exit Rule Logic</h3>
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-2xl bg-blue-50 p-3"><b>Delivery:</b> Auto-close demo after 40 seconds.</div>
+                  <div className="rounded-2xl bg-emerald-50 p-3"><b>Guests:</b> Manual exit by guard/admin.</div>
+                  <div className="rounded-2xl bg-amber-50 p-3"><b>Vehicles:</b> Vehicle QR pass + mark out timestamp.</div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {section === "billing" && (
+          <div className="mt-7">
+            <SectionTitle title="Billing ERP" sub="Generate bills, reminders and payment reports" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[["Total Demand", "₹12.4L"], ["Collected", collectedAmount], ["Pending", pendingAmount], ["Overdue Flats", overdueFlats]].map(([a, b]) => <Card key={a} className="p-4"><p className="text-xs text-slate-500">{a}</p><p className="text-2xl font-black mt-2">{b}</p></Card>)}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-4"><Button onClick={() => notify("Monthly bills generated")}>Generate Bills</Button><Button onClick={() => notify("Reminders sent")} variant="ghost">Send Reminder</Button><Button onClick={() => notify("Billing Excel exported")} variant="ghost">Export Excel</Button></div>
+          </div>
+        )}
+
+        {section === "complaints" && (
+          <div className="mt-7">
+            <SectionTitle title="Complaint Board" sub="SLA tracking and staff assignment" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">{["New", "In Progress", "Pending Resident", "Resolved"].map((col, i) => <Card key={col} className="p-4 min-h-44"><h3 className="font-black">{col}</h3>{i === 1 && <div onClick={() => notify("Ticket SG-1024 opened")} className="mt-4 rounded-2xl bg-amber-50 p-3 cursor-pointer"><p className="font-bold">SG-1024</p><p className="text-xs text-slate-500">Lift Issue • B-804</p></div>}</Card>)}</div>
+          </div>
+        )}
+
+        {section === "reports" && (
+          <div className="mt-7">
+            <SectionTitle title="Reports" sub="Export committee-ready reports" />
+            <div className="grid md:grid-cols-4 gap-4">{[[FileText, "Visitor Report"], [Car, "Vehicle Report"], [ReceiptText, "Billing Report"], [ClipboardList, "Complaint Report"]].map(([Icon, t]) => <Card key={t} className="p-5"><Icon className="text-blue-600" /><h3 className="font-black mt-3">{t}</h3><Button onClick={() => notify(`${t} downloaded`)} className="mt-4 w-full" variant="ghost">Download</Button></Card>)}</div>
+          </div>
+        )}
+
+        {section === "ai" && (
+          <div className="mt-7 space-y-5">
+            <div className="rounded-[2rem] bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 text-white p-6 shadow-xl shadow-blue-200">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <p className="text-blue-100 text-sm font-bold uppercase tracking-wide">Phase 4.1</p>
+                  <h2 className="text-3xl lg:text-4xl font-black mt-1 flex items-center gap-3">
+                    <Bot size={36} /> SocioGate AI Copilot
+                  </h2>
+                  <p className="text-blue-50 mt-2 max-w-2xl">
+                    AI-powered security, billing and operations intelligence for premium society management.
+                  </p>
+                </div>
+                <div className="rounded-3xl bg-white/15 border border-white/20 p-4 min-w-[180px]">
+                  <p className="text-blue-100 text-sm">AI Readiness</p>
+                  <p className="text-3xl font-black">Live</p>
+                </div>
+              </div>
+            </div>
+
+            <Card className="p-6 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 text-white border-blue-500/20 shadow-xl">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                <div>
+                  <p className="text-blue-200 text-sm font-bold">Society Health Score</p>
+                  <h2 className="text-6xl font-black mt-3">92</h2>
+                  <p className="text-slate-300 text-sm mt-1">out of 100</p>
+                  <p className="text-slate-400 text-sm mt-4">
+                    Overall operational health based on visitor lifecycle, billing, complaints and security events.
+                  </p>
+                </div>
+
+                <div className="xl:col-span-2 grid md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex justify-between text-sm"><span>Security</span><b className="text-emerald-300">96%</b></div>
+                    <div className="h-2 bg-slate-800 rounded-full mt-2"><div className="h-full w-[96%] bg-emerald-400 rounded-full" /></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm"><span>Billing</span><b className="text-cyan-300">88%</b></div>
+                    <div className="h-2 bg-slate-800 rounded-full mt-2"><div className="h-full w-[88%] bg-cyan-400 rounded-full" /></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm"><span>Complaints</span><b className="text-amber-300">90%</b></div>
+                    <div className="h-2 bg-slate-800 rounded-full mt-2"><div className="h-full w-[90%] bg-amber-400 rounded-full" /></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm"><span>Operations</span><b className="text-purple-300">94%</b></div>
+                    <div className="h-2 bg-slate-800 rounded-full mt-2"><div className="h-full w-[94%] bg-purple-400 rounded-full" /></div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950 flex items-center gap-2">
+                <Bot className="text-blue-600" /> AI Command Center
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">Live recommendations based on current demo data.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mt-5 items-start">
+                <div className="rounded-3xl bg-red-50 border border-red-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><ShieldAlert className="text-red-600" /><b className="text-red-900">Security Insight</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    {activeVisitor?.status === "wrong entry"
+                      ? "Wrong entry reported by resident. Guard verification recommended immediately."
+                      : activeVisitor?.status === "inside"
+                      ? "Delivery visitor is currently inside. Auto-exit timer is recommended for delivery category."
+                      : "No active high-risk visitor detected right now."}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-blue-50 border border-blue-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><IndianRupee className="text-blue-600" /><b className="text-blue-900">Billing Recovery</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Expected collection this month: ₹11.2L of ₹12.4L. Recovery probability: 90%.
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-amber-50 border border-amber-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><Wrench className="text-amber-600" /><b className="text-amber-900">Complaint Prediction</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Lift issue trend detected. AI predicts 3 more complaints in next 7 days if preventive maintenance is delayed.
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><Car className="text-emerald-600" /><b className="text-emerald-900">Vehicle Intelligence</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    {activeVehicle?.status === "in"
+                      ? `Vehicle ${activeVehicle.number} is currently inside. Exit tracking is active.`
+                      : activeVehicle?.status === "out"
+                      ? `Vehicle ${activeVehicle.number} has exited successfully.`
+                      : "No unusual vehicle movement detected."}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-purple-50 border border-purple-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><ShieldCheck className="text-purple-600" /><b className="text-purple-900">Face Recognition</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Known Faces: 143<br />
+                    New Visitors: 8<br />
+                    Suspicious Faces: {activeVisitor?.status === "wrong entry" ? 2 : 1}
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5 bg-slate-950 text-white border-slate-800 shadow-xl">
+              <h3 className="font-black text-2xl flex items-center gap-2"><Bot className="text-cyan-300" /> Ask SocioGate AI</h3>
+              <p className="text-sm text-slate-400 mt-1">Demo AI answers for client pitch. Click any question to show instant AI response.</p>
+
+              <div className="mt-5 rounded-3xl bg-gradient-to-r from-cyan-950/60 to-blue-950/60 border border-cyan-400/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-cyan-300 font-bold">AI Response</p>
+                <p className="mt-2 text-white font-semibold">{aiAnswer}</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
+                {[
+                  ["How many visitors today?", `${visitorsToday} visitors logged today.`],
+                  ["Any suspicious activity?", activeVisitor?.status === "wrong entry" ? "Yes. Wrong entry reported by resident A-1204." : "No critical suspicious activity right now."],
+                  ["Which flats have dues?", `${overdueFlats} flats are overdue. A-1204 is ${billPaid ? "paid" : "pending"}.`],
+                  ["What should admin do next?", "Review security logs, send billing reminders, and schedule lift maintenance."]
+                ].map(([q, a]) => (
+                  <button
+                    key={q}
+                    onClick={() => { setAiAnswer(a); }}
+                    className="w-full text-left rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 p-4 transition"
+                  >
+                    <p className="font-bold text-cyan-200">{q}</p>
+                    <p className="text-xs text-slate-400 mt-1">Click to show AI answer</p>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950 flex items-center gap-2">
+                <Sparkles className="text-blue-600" /> Smart Recommendations
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4 text-sm">
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Security:</b><br />Enable 30-minute auto-close for all delivery visitors.</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Billing:</b><br />Send reminder to overdue flats with payment link.</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Operations:</b><br />Schedule lift preventive maintenance before weekend.</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Admin:</b><br />Export visitor and vehicle reports before committee meeting.</div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {section === "settings" && (
+          <div className="mt-7">
+            <SectionTitle title="Settings" sub="Society, gates, roles and permissions" />
+            <Card className="p-5 space-y-3"><p><b>Society:</b> Green Meadows Society</p><p><b>Gates:</b> Main Gate, Basement Gate</p><p><b>Plan:</b> Professional</p><Button onClick={() => notify("Settings saved")}>Save Settings</Button></Card>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default function SocioGateClickableDemo() {
+  const [mode, setMode] = useState("overview");
+  const [activeVisitor, setActiveVisitor] = useState(null);
+  const [visitorHistory, setVisitorHistory] = useState([]);
+  const [activeVehicle, setActiveVehicle] = useState(null);
+  const [vehicleHistory, setVehicleHistory] = useState([]);
+  const [knownVisitors, setKnownVisitors] = useState({});
+  const [billPaid, setBillPaid] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [toast, setToast] = useState("");
+  const [resetKey, setResetKey] = useState(0);
+  const [resetSerial, setResetSerial] = useState(0);
+
+  const notify = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2200);
+  };
+
+  const addLog = (log) => setLogs((prev) => [...prev, log]);
+
+  const saveVisitor = (updated) => {
+    setVisitorHistory((prev) => [updated, ...prev.filter((v) => v.id !== updated.id)]);
+  };
+
+  const saveVehicle = (updated) => {
+    setVehicleHistory((prev) => [updated, ...prev.filter((v) => v.id !== updated.id)]);
+  };
+
+  const steps = useMemo(() => ["Guard: Add Visitor", "Resident: Approve", "Guard: Allow Entry", "Exit / Auto Close", "ERP Sync"], []);
+
+  const resetDemo = () => {
+    setActiveVisitor(null);
+    setVisitorHistory([]);
+    setActiveVehicle(null);
+    setVehicleHistory([]);
+    setKnownVisitors({});
+    setBillPaid(false);
+    setLogs([]);
+    setResetKey((k) => k + 1);
+    setResetSerial((s) => s + 1);
+    notify("Demo fully reset");
+  };
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32%),linear-gradient(135deg,#f8fafc,#eef6ff)] p-3 sm:p-5 lg:p-6 text-slate-900 overflow-x-hidden">
+      <style>{`
+        .sg-scroll{scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+        .sg-scroll::-webkit-scrollbar{display:none}
+        .phone-polish{box-shadow:0 25px 80px rgba(15,23,42,.28), inset 0 0 0 1px rgba(255,255,255,.08)}
+        .glass-card{backdrop-filter:blur(18px)}
+        html,body,#root{width:100%;overflow-x:hidden}
+        @media(max-width:640px){.demo-title{font-size:2.25rem;line-height:1.05}.demo-mode-btn{flex:1 1 calc(50% - .5rem)}.demo-step{font-size:10px}}
+      `}</style>
+      <Toast toast={toast} clear={() => setToast("")} />
+      <div className="max-w-[1280px] mx-auto w-full">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div><Logo /><h1 className="demo-title mt-5 text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight">SocioGate Clickable Demo</h1><p className="mt-3 text-slate-600 max-w-2xl">Stable demo with synchronized visitor, vehicle, resident and ERP lifecycle.</p></div>
+          <div className="flex flex-wrap gap-2 w-full lg:w-auto">{[["overview", "All Views"], ["resident", "Resident"], ["guard", "Guard"], ["erp", "ERP"]].map(([key, label]) => <Button key={key} onClick={() => setMode(key)} variant={mode === key ? "primary" : "ghost"} className="demo-mode-btn">{label}</Button>)}</div>
+        </div>
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl bg-white/80 glass-card border border-blue-100 p-4 shadow-sm"><p className="text-xs text-slate-500">Prototype Status</p><div className="mt-2 flex items-center gap-2 font-black text-emerald-600"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" /> Stable Build</div></div>
+          <div className="rounded-2xl bg-white/80 glass-card border border-blue-100 p-4 shadow-sm"><p className="text-xs text-slate-500">Active Visitor</p><div className="mt-2 font-black text-slate-950">{activeVisitor ? `${activeVisitor.name} • ${activeVisitor.status}` : "None"}</div></div>
+          <div className="rounded-2xl bg-white/80 glass-card border border-blue-100 p-4 shadow-sm"><p className="text-xs text-slate-500">Active Vehicle</p><div className="mt-2 font-black text-slate-950">{activeVehicle ? `${activeVehicle.number} • ${activeVehicle.status}` : "None"}</div></div>
+          <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 p-4 shadow-lg text-white"><p className="text-xs text-blue-100">Pitch Mode</p><div className="mt-2 font-black">Investor-Level Preview</div></div>
+        </div>
+        <Card className="mt-4 p-4 flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+          <div className="flex flex-wrap gap-2">{steps.map((s) => <span key={s} className="demo-step rounded-full bg-blue-50 text-blue-700 text-xs font-bold px-3 py-2">{s}</span>)}</div>
+          <Button onClick={resetDemo} variant="danger">Reset Demo</Button>
+        </Card>
+        <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
+          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
+          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
+          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} logs={logs} notify={notify} billPaid={billPaid} /></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
