@@ -86,6 +86,32 @@ const initials = (name = "NA") =>
 
 const normalizeMobile = (mobile = "") => String(mobile).replace(/\D/g, "").slice(-10);
 
+const BLACKLISTED_VISITOR_MOBILES = ["9990001111", "8881112222", "7773334444"];
+
+const getSecurityRisk = (mobile = "") => {
+  const normalized = normalizeMobile(mobile);
+  if (BLACKLISTED_VISITOR_MOBILES.includes(normalized)) {
+    return {
+      blacklisted: true,
+      riskScore: 95,
+      riskLabel: "High Risk",
+      faceType: "Blacklisted Visitor",
+      securityReason: "Visitor mobile is present in society watchlist",
+      securityRecommendation: "Reject recommended",
+    };
+  }
+
+  return {
+    blacklisted: false,
+    riskScore: null,
+    riskLabel: null,
+    faceType: null,
+    securityReason: "",
+    securityRecommendation: "",
+  };
+};
+
+
 const visitorBadge = (status) => {
   if (["approved", "inside"].includes(status)) return "bg-emerald-100 text-emerald-700";
   if (status === "pending") return "bg-blue-100 text-blue-700";
@@ -230,6 +256,9 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     setActiveVisitor(updated);
     saveVisitor(updated);
     addLog(`Resident rejected ${updated.name}`);
+    if (typeof window !== "undefined") {
+      // Demo state is updated centrally by guard attempt tracking.
+    }
     setShowPopup(false);
     notify("Visitor rejected");
   };
@@ -521,6 +550,19 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
               <div className="flex justify-between"><p className="text-xs font-bold text-blue-600 uppercase tracking-wide">New Visitor Notification</p><button onClick={() => setShowPopup(false)}><X size={18} /></button></div>
               <h3 className="text-xl font-black mt-2">{activeVisitor.name}</h3>
               <p className="text-sm text-slate-500 mt-1">{activeVisitor.purpose} • {activeVisitor.flat} • {activeVisitor.requestTime}</p>
+              {(activeVisitor?.blacklisted || activeVisitor?.suspicious) && (
+                <div className="mt-4 rounded-2xl bg-red-50 border border-red-200 p-4">
+                  <div className="flex gap-3">
+                    <ShieldAlert className="text-red-600 shrink-0" size={24} />
+                    <div>
+                      <p className="font-black text-red-700">Security Warning</p>
+                      <p className="text-sm text-red-700 mt-1">{activeVisitor.blacklisted ? "Visitor appears on watchlist." : activeVisitor.suspiciousType}</p>
+                      <p className="text-xs text-red-600 mt-1">Risk Score: {activeVisitor.riskScore}% • {activeVisitor.securityRecommendation || "Security verification recommended"}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-2 mt-5">
                 <Button onClick={approve} variant="success" className="py-3">Approve</Button>
                 <Button onClick={reject} variant="danger" className="py-3">Reject</Button>
@@ -534,7 +576,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   );
 }
 
-function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, resetSerial, addLog, notify }) {
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, resetSerial, addLog, notify }) {
   const [screen, setScreen] = useState("login");
   const [visitorForm, setVisitorForm] = useState({
     name: "Ramesh Kumar",
@@ -570,6 +612,20 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   const showCurrentFaceCard =
     activeVisitor?.photoCaptured === true &&
     isCurrentDraftVisitor;
+
+  const securityRisk = getSecurityRisk(visitorForm.mobile);
+  const isBlacklistedVisitor = securityRisk.blacklisted;
+
+  const currentAttemptProfile = visitorAttempts?.[normalizedVisitorMobile];
+  const attemptedFlats = currentAttemptProfile?.flats || [];
+  const rejectedFlats = currentAttemptProfile?.rejectedFlats || [];
+  const isMultipleFlatAttempt =
+    normalizedVisitorMobile.length === 10 &&
+    attemptedFlats.length > 0 &&
+    !attemptedFlats.includes(visitorForm.flat);
+  const isRejectedRetry =
+    normalizedVisitorMobile.length === 10 &&
+    rejectedFlats.length > 0;
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -674,9 +730,32 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       photoUrl,
       faceVerified: true,
       faceConfidence: "98%",
-      faceType: "First Time Visitor",
-      riskScore: 30,
-      riskLabel: "Medium Risk",
+      faceType: securityRisk.blacklisted
+        ? "Blacklisted Visitor"
+        : isMultipleFlatAttempt
+        ? "Suspicious Visitor"
+        : isRejectedRetry
+        ? "Previously Rejected Visitor"
+        : "First Time Visitor",
+      riskScore: securityRisk.blacklisted ? securityRisk.riskScore : isMultipleFlatAttempt ? 75 : isRejectedRetry ? 65 : 30,
+      riskLabel: securityRisk.blacklisted ? securityRisk.riskLabel : isMultipleFlatAttempt ? "High Risk" : isRejectedRetry ? "Medium Risk" : "Medium Risk",
+      blacklisted: securityRisk.blacklisted,
+      suspicious: isMultipleFlatAttempt || isRejectedRetry,
+      suspiciousType: isMultipleFlatAttempt ? "Multiple Flat Attempts" : isRejectedRetry ? "Rejected Visitor Retry" : "",
+      attemptedFlats,
+      rejectedFlats,
+      securityReason: securityRisk.blacklisted
+        ? securityRisk.securityReason
+        : isMultipleFlatAttempt
+        ? `Visitor already attempted ${attemptedFlats.join(", ")} and is now trying ${visitorForm.flat}`
+        : isRejectedRetry
+        ? `Visitor was previously rejected for ${rejectedFlats.join(", ")}`
+        : "",
+      securityRecommendation: securityRisk.blacklisted
+        ? securityRisk.securityRecommendation
+        : isMultipleFlatAttempt || isRejectedRetry
+        ? "Security verification recommended"
+        : "",
     };
 
     setActiveVisitor(draft);
@@ -687,6 +766,8 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
   const applyKnownVisitorProfile = () => {
     const profile = knownProfile;
+    const profileSecurityRisk = getSecurityRisk(profile?.mobile || visitorForm.mobile);
+    const profileBlacklisted = profileSecurityRisk.blacklisted;
     if (!profile) {
       notify("No saved visitor profile found for this mobile");
       return;
@@ -710,9 +791,12 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       photoUrl: profile.photoUrl || "",
       faceVerified: true,
       faceConfidence: profile.faceConfidence || "98%",
-      faceType: "Known Visitor",
-      riskScore: profile.riskScore || 10,
-      riskLabel: profile.riskLabel || "Low Risk",
+      faceType: profileBlacklisted ? "Blacklisted Visitor" : "Known Visitor",
+      riskScore: profileBlacklisted ? 95 : profile.riskScore || 10,
+      riskLabel: profileBlacklisted ? "High Risk" : profile.riskLabel || "Low Risk",
+      blacklisted: profileBlacklisted,
+      securityReason: profileSecurityRisk.securityReason,
+      securityRecommendation: profileSecurityRisk.securityRecommendation,
       repeatVisitor: true,
     };
 
@@ -758,6 +842,9 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     if (screen !== "add" || !knownProfile) return;
     if (activeVisitor?.repeatVisitor && normalizeMobile(activeVisitor?.mobile) === normalizedVisitorMobile) return;
 
+    const autoSecurityRisk = getSecurityRisk(knownProfile?.mobile || visitorForm.mobile);
+    const autoBlacklisted = autoSecurityRisk.blacklisted;
+
     const updatedDraft = {
       id: Date.now(),
       name: knownProfile.name || visitorForm.name,
@@ -776,9 +863,12 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       photoUrl: knownProfile.photoUrl || "",
       faceVerified: true,
       faceConfidence: knownProfile.faceConfidence || "98%",
-      faceType: "Known Visitor",
-      riskScore: knownProfile.riskScore || 10,
-      riskLabel: knownProfile.riskLabel || "Low Risk",
+      faceType: autoBlacklisted ? "Blacklisted Visitor" : "Known Visitor",
+      riskScore: autoBlacklisted ? 95 : knownProfile.riskScore || 10,
+      riskLabel: autoBlacklisted ? "High Risk" : knownProfile.riskLabel || "Low Risk",
+      blacklisted: autoBlacklisted,
+      securityReason: autoSecurityRisk.securityReason,
+      securityRecommendation: autoSecurityRisk.securityRecommendation,
       repeatVisitor: true,
     };
 
@@ -824,6 +914,18 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
   const createVisitor = () => {
     const profile = knownProfile;
+    const requestSecurityRisk = getSecurityRisk(visitorForm.mobile);
+    const requestBlacklisted = requestSecurityRisk.blacklisted;
+    const requestAttemptProfile = visitorAttempts?.[normalizeMobile(visitorForm.mobile)] || { flats: [], rejectedFlats: [] };
+    const requestAttemptedFlats = requestAttemptProfile.flats || [];
+    const requestRejectedFlats = requestAttemptProfile.rejectedFlats || [];
+    const requestMultipleFlatAttempt =
+      normalizeMobile(visitorForm.mobile).length === 10 &&
+      requestAttemptedFlats.length > 0 &&
+      !requestAttemptedFlats.includes(visitorForm.flat);
+    const requestRejectedRetry =
+      normalizeMobile(visitorForm.mobile).length === 10 &&
+      requestRejectedFlats.length > 0;
     const draftSource =
       activeVisitor?.status === "draft" &&
       normalizeMobile(activeVisitor?.mobile) === normalizeMobile(visitorForm.mobile)
@@ -844,9 +946,36 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       photoUrl: profile?.photoUrl || draftSource?.photoUrl || "",
       faceVerified: hasCapturedFace,
       faceConfidence: hasCapturedFace ? (profile?.faceConfidence || draftSource?.faceConfidence || "98%") : "--",
-      faceType: profile ? "Known Visitor" : hasCapturedFace ? (draftSource?.faceType || "First Time Visitor") : "Not Scanned",
-      riskScore: profile ? (profile.riskScore || 10) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
-      riskLabel: profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
+      faceType: requestBlacklisted
+        ? "Blacklisted Visitor"
+        : requestMultipleFlatAttempt
+        ? "Suspicious Visitor"
+        : requestRejectedRetry
+        ? "Previously Rejected Visitor"
+        : profile
+        ? "Known Visitor"
+        : hasCapturedFace
+        ? (draftSource?.faceType || "First Time Visitor")
+        : "Not Scanned",
+      riskScore: requestBlacklisted ? 95 : requestMultipleFlatAttempt ? 75 : requestRejectedRetry ? 65 : profile ? (profile.riskScore || 10) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
+      riskLabel: requestBlacklisted ? "High Risk" : requestMultipleFlatAttempt ? "High Risk" : requestRejectedRetry ? "Medium Risk" : profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
+      blacklisted: requestBlacklisted,
+      suspicious: requestMultipleFlatAttempt || requestRejectedRetry,
+      suspiciousType: requestMultipleFlatAttempt ? "Multiple Flat Attempts" : requestRejectedRetry ? "Rejected Visitor Retry" : "",
+      attemptedFlats: requestAttemptedFlats,
+      rejectedFlats: requestRejectedFlats,
+      securityReason: requestBlacklisted
+        ? requestSecurityRisk.securityReason
+        : requestMultipleFlatAttempt
+        ? `Visitor already attempted ${requestAttemptedFlats.join(", ")} and is now trying ${visitorForm.flat}`
+        : requestRejectedRetry
+        ? `Visitor was previously rejected for ${requestRejectedFlats.join(", ")}`
+        : requestSecurityRisk.securityReason,
+      securityRecommendation: requestBlacklisted
+        ? requestSecurityRisk.securityRecommendation
+        : requestMultipleFlatAttempt || requestRejectedRetry
+        ? "Security verification recommended"
+        : requestSecurityRisk.securityRecommendation,
       repeatVisitor: !!profile,
       status: "pending",
       requestTime: "11:45 AM",
@@ -859,6 +988,21 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
     setActiveVisitor(visitor);
     saveVisitor(visitor);
+    if (setVisitorAttempts && normalizeMobile(visitor.mobile).length === 10) {
+      setVisitorAttempts((prev) => {
+        const key = normalizeMobile(visitor.mobile);
+        const existing = prev[key] || { flats: [], rejectedFlats: [] };
+        return {
+          ...prev,
+          [key]: {
+            ...existing,
+            flats: Array.from(new Set([...(existing.flats || []), visitor.flat])),
+            lastName: visitor.name,
+            lastFlat: visitor.flat,
+          },
+        };
+      });
+    }
     addLog(`Guard sent visitor approval request for ${visitor.name} (${visitor.flat})${profile ? " • Known visitor auto-fetched" : ""}`);
     notify(profile ? "Known visitor request sent" : "Approval request sent");
     setScreen("waiting");
@@ -952,14 +1096,53 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
                     </div>
                   )}
                   <div>
-                    <p className="font-black text-emerald-300">Known Visitor Found</p>
+                    <p className={getSecurityRisk(knownProfile.mobile).blacklisted ? "font-black text-red-300" : "font-black text-emerald-300"}>
+                      {getSecurityRisk(knownProfile.mobile).blacklisted ? "Known Visitor Found • Watchlist Match" : "Known Visitor Found"}
+                    </p>
                     <p className="text-sm text-slate-300">{knownProfile.name} • {knownProfile.flat}</p>
-                    <p className="text-xs text-cyan-300 mt-1">Face Match: {knownProfile.faceConfidence} • No recapture needed</p>
+                    <p className={getSecurityRisk(knownProfile.mobile).blacklisted ? "text-xs text-red-200 mt-1" : "text-xs text-cyan-300 mt-1"}>
+                      {getSecurityRisk(knownProfile.mobile).blacklisted ? "Blacklisted Visitor • Risk 95%" : `Face Match: ${knownProfile.faceConfidence} • No recapture needed`}
+                    </p>
                   </div>
                 </div>
                 <Button onClick={applyKnownVisitorProfile} variant="success" className="py-2 px-3 text-xs">
                   Auto Fetch
                 </Button>
+              </div>
+            </Card>
+          )}
+
+          {isBlacklistedVisitor && (
+            <Card className="p-4 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/40 text-white shadow-xl shadow-red-950/30">
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="text-red-300 animate-pulse" size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-red-300">SECURITY ALERT</p>
+                  <p className="text-sm text-white mt-1">Blacklisted Visitor Detected</p>
+                  <p className="text-xs text-red-200 mt-1">Risk Score: 95% • Approval not recommended</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {!isBlacklistedVisitor && (isMultipleFlatAttempt || isRejectedRetry) && (
+            <Card className="p-4 bg-gradient-to-r from-amber-950 via-slate-950 to-orange-950 border-amber-500/40 text-white shadow-xl shadow-amber-950/30">
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="text-amber-300 animate-pulse" size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-amber-300">SUSPICIOUS ACTIVITY</p>
+                  <p className="text-sm text-white mt-1">{isMultipleFlatAttempt ? "Multiple Flat Attempts Detected" : "Previously Rejected Visitor"}</p>
+                  <p className="text-xs text-amber-200 mt-1">
+                    Risk Score: {isMultipleFlatAttempt ? "75%" : "65%"} • Security verification recommended
+                  </p>
+                  {attemptedFlats.length > 0 && (
+                    <p className="text-xs text-slate-300 mt-1">Previous flats: {attemptedFlats.join(", ")}</p>
+                  )}
+                </div>
               </div>
             </Card>
           )}
@@ -1172,6 +1355,12 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
                 </div>
               </div>
               <p className="text-xs text-slate-400 mt-3">AI Result: {activeVisitor.faceVerified ? (activeVisitor.faceType || "Known Visitor") : "Not Scanned"} • {activeVisitor.faceVerified ? (activeVisitor.riskLabel || "Low Risk") : (activeVisitor.riskLabel || "Medium Risk")}</p>
+              {(activeVisitor.blacklisted || activeVisitor.suspicious) && (
+                <div className={`mt-4 rounded-2xl p-3 ${activeVisitor.blacklisted ? "bg-red-500/10 border border-red-500/30" : "bg-amber-500/10 border border-amber-500/30"}`}>
+                  <p className={`text-sm font-black ${activeVisitor.blacklisted ? "text-red-300" : "text-amber-300"}`}>{activeVisitor.blacklisted ? "Blacklisted Visitor Alert" : "Suspicious Activity Alert"}</p>
+                  <p className={`text-xs mt-1 ${activeVisitor.blacklisted ? "text-red-200" : "text-amber-200"}`}>{activeVisitor.securityReason || "Security verification recommended."}</p>
+                </div>
+              )}
             </Card>
 
             {activeVisitor.status === "inside" && activeVisitor.purpose.toLowerCase().includes("delivery") && (
@@ -1294,7 +1483,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, logs, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, logs, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
@@ -1376,10 +1565,29 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
         {section === "dashboard" && (
           <div className="mt-7">
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Pending Complaints", "8"], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
+              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Security Alerts", visitorHistory.filter((v) => v.blacklisted || v.suspicious || (v.riskScore || 0) >= 65).length + ((activeVisitor?.blacklisted || activeVisitor?.suspicious) ? 1 : 0)], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
                 <Card key={title} className="p-4"><p className="text-xs text-slate-500">{title}</p><p className="text-2xl font-black text-slate-950 mt-2">{value}</p></Card>
               ))}
             </div>
+            {((activeVisitor?.blacklisted || activeVisitor?.suspicious) || visitorHistory.some((v) => v.blacklisted || v.suspicious)) && (
+              <Card className="p-5 mt-5 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/30 text-white shadow-xl shadow-red-950/30">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert className="text-red-300 animate-pulse" size={30} />
+                  <div>
+                    <h3 className="font-black text-white">Security Intelligence Alert</h3>
+                    <p className="text-sm text-red-200">
+                      Security intelligence detected watchlist or suspicious visitor activity
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Blacklisted</p><b>{visitorHistory.filter((v) => v.blacklisted).length + (activeVisitor?.blacklisted ? 1 : 0)}</b></div>
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Suspicious</p><b>{visitorHistory.filter((v) => v.suspicious).length + (activeVisitor?.suspicious ? 1 : 0)}</b></div>
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Last Alert</p><b>{(activeVisitor?.blacklisted || activeVisitor?.suspicious) ? activeVisitor.name : visitorHistory.find((v) => v.blacklisted || v.suspicious)?.name || "None"}</b></div>
+                </div>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
               <Card className="p-5 xl:col-span-2 h-64">
                 <div className="flex justify-between"><h3 className="font-black text-slate-950">Visitor Trend</h3><span className="text-xs text-emerald-600 font-bold">Live</span></div>
@@ -1725,6 +1933,7 @@ export default function SocioGateClickableDemo() {
   const [activeVehicle, setActiveVehicle] = useState(null);
   const [vehicleHistory, setVehicleHistory] = useState([]);
   const [knownVisitors, setKnownVisitors] = useState({});
+  const [visitorAttempts, setVisitorAttempts] = useState({});
   const [billPaid, setBillPaid] = useState(false);
   const [logs, setLogs] = useState([]);
   const [toast, setToast] = useState("");
@@ -1754,6 +1963,7 @@ export default function SocioGateClickableDemo() {
     setActiveVehicle(null);
     setVehicleHistory([]);
     setKnownVisitors({});
+    setVisitorAttempts({});
     setBillPaid(false);
     setLogs([]);
     setResetKey((k) => k + 1);
@@ -1789,7 +1999,7 @@ export default function SocioGateClickableDemo() {
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
           {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
-          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
+          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
           {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} logs={logs} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
