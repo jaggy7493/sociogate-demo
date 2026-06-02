@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, Bell, UserCheck, Wallet, MessageSquareWarning, Megaphone, Siren, Home,
@@ -447,13 +447,22 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
 
           <Card className="mt-5 p-4 shadow-md border-slate-200">
             <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500">Visitor activity</p>
-                <h3 className="font-black mt-1 text-slate-950">{latest ? latest.name : "No visitor yet"}</h3>
-                <p className="text-xs text-slate-600">{latest ? `${latest.purpose} • ${latest.gate}` : "No active request"}</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {latest ? (latest.exitTime !== "--" ? `Exit: ${latest.exitTime}` : latest.entryTime !== "--" ? `Entered: ${latest.entryTime}` : latest.approvedAt !== "--" ? `Approved: ${latest.approvedAt}` : latest.status) : "All clear"}
-                </p>
+              <div className="flex gap-3 items-start">
+                {latest?.photoUrl ? (
+                  <img src={latest.photoUrl} alt="Visitor" className="h-12 w-12 rounded-2xl object-cover border border-blue-200" />
+                ) : latest ? (
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 text-white flex items-center justify-center font-black">
+                    {initials(latest.name)}
+                  </div>
+                ) : null}
+                <div>
+                  <p className="text-sm text-slate-500">Visitor activity</p>
+                  <h3 className="font-black mt-1 text-slate-950">{latest ? latest.name : "No visitor yet"}</h3>
+                  <p className="text-xs text-slate-600">{latest ? `${latest.purpose} • ${latest.gate}` : "No active request"}</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {latest ? (latest.exitTime !== "--" ? `Exit: ${latest.exitTime}` : latest.entryTime !== "--" ? `Entered: ${latest.entryTime}` : latest.approvedAt !== "--" ? `Approved: ${latest.approvedAt}` : latest.status) : "All clear"}
+                  </p>
+                </div>
               </div>
               <span className={`text-xs rounded-full px-3 py-1 ${residentDisplayBadge(latest?.status)}`}>{residentDisplayStatus(latest?.status)}</span>
             </div>
@@ -525,7 +534,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   );
 }
 
-function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors, setKnownVisitors, resetSerial, addLog, notify }) {
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, resetSerial, addLog, notify }) {
   const [screen, setScreen] = useState("login");
   const [visitorForm, setVisitorForm] = useState({
     name: "Ramesh Kumar",
@@ -541,11 +550,12 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     gate: "Main Gate",
   });
   const [autoCloseSeconds, setAutoCloseSeconds] = useState(40);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [cameraFacing, setCameraFacing] = useState("environment");
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
-  useEffect(() => {
-    setScreen("login");
-    setActiveVisitor(null);
-  }, [resetSerial]);
   const normalizedVisitorMobile = normalizeMobile(visitorForm.mobile);
   const knownProfile =
     normalizedVisitorMobile.length === 10 &&
@@ -560,6 +570,120 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   const showCurrentFaceCard =
     activeVisitor?.photoCaptured === true &&
     isCurrentDraftVisitor;
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const isMobileDevice = () =>
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+
+  const startCamera = async (facingMode = cameraFacing) => {
+    setCameraError("");
+    stopCamera();
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("Camera is not supported in this browser.");
+        setCameraOpen(true);
+        return;
+      }
+
+      const preferredFacing = isMobileDevice() ? facingMode : "user";
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: preferredFacing } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      streamRef.current = stream;
+      setCameraFacing(preferredFacing);
+      setCameraOpen(true);
+
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 100);
+    } catch {
+      setCameraError("Camera permission denied or camera not available.");
+      setCameraOpen(true);
+    }
+  };
+
+  const openCamera = async () => {
+    await startCamera(isMobileDevice() ? "environment" : "user");
+  };
+
+  const flipCamera = async () => {
+    await startCamera(cameraFacing === "environment" ? "user" : "environment");
+  };
+
+  const closeCamera = () => {
+    stopCamera();
+    setCameraOpen(false);
+  };
+
+  const takeSnapshot = () => {
+    const video = videoRef.current;
+
+    if (!video || !video.videoWidth) {
+      setCameraError("Camera preview not ready. Please try again.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const photoUrl = canvas.toDataURL("image/png");
+    captureFaceDemo(photoUrl);
+    closeCamera();
+  };
+
+
+  const captureFaceDemo = (photoUrl = "") => {
+    const mobileKey = normalizeMobile(visitorForm.mobile);
+    const draft = {
+      id: Date.now(),
+      name: visitorForm.name,
+      mobile: mobileKey,
+      flat: visitorForm.flat,
+      purpose: visitorForm.purpose,
+      gate: visitorForm.gate,
+      status: "draft",
+      requestTime: "11:45 AM",
+      approvedBy: "--",
+      approvedAt: "--",
+      entryTime: "--",
+      exitTime: "--",
+      passId: `SG-${Date.now().toString().slice(-5)}`,
+      photoCaptured: true,
+      photoUrl,
+      faceVerified: true,
+      faceConfidence: "98%",
+      faceType: "First Time Visitor",
+      riskScore: 30,
+      riskLabel: "Medium Risk",
+    };
+
+    setActiveVisitor(draft);
+    addLog(`AI Face Recognition completed for ${draft.name}: 98% confidence, Medium Risk`);
+    notify(photoUrl ? "Photo captured and face verified" : "Face captured and verified");
+  };
+
 
   const applyKnownVisitorProfile = () => {
     const profile = knownProfile;
@@ -583,6 +707,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       exitTime: "--",
       passId: `SG-${Date.now().toString().slice(-5)}`,
       photoCaptured: true,
+      photoUrl: profile.photoUrl || "",
       faceVerified: true,
       faceConfidence: profile.faceConfidence || "98%",
       faceType: "Known Visitor",
@@ -594,6 +719,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     setVisitorForm((prev) => ({
       ...prev,
       name: updatedDraft.name,
+      mobile: updatedDraft.mobile,
       flat: updatedDraft.flat,
       purpose: updatedDraft.purpose,
       gate: updatedDraft.gate,
@@ -617,6 +743,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         purpose: visitor.purpose,
         gate: visitor.gate,
         faceConfidence: visitor.faceConfidence || "98%",
+        photoUrl: visitor.photoUrl || "",
         faceType: "Known Visitor",
         riskScore: 10,
         riskLabel: "Low Risk",
@@ -626,6 +753,52 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
     addLog(`Known visitor profile saved for ${visitor.name} (${mobileKey})`);
   };
+
+  useEffect(() => {
+    if (screen !== "add" || !knownProfile) return;
+    if (activeVisitor?.repeatVisitor && normalizeMobile(activeVisitor?.mobile) === normalizedVisitorMobile) return;
+
+    const updatedDraft = {
+      id: Date.now(),
+      name: knownProfile.name || visitorForm.name,
+      mobile: knownProfile.mobile || normalizedVisitorMobile,
+      flat: knownProfile.flat || visitorForm.flat,
+      purpose: knownProfile.purpose || visitorForm.purpose,
+      gate: knownProfile.gate || visitorForm.gate,
+      status: "draft",
+      requestTime: "11:45 AM",
+      approvedBy: "--",
+      approvedAt: "--",
+      entryTime: "--",
+      exitTime: "--",
+      passId: `SG-${Date.now().toString().slice(-5)}`,
+      photoCaptured: true,
+      photoUrl: knownProfile.photoUrl || "",
+      faceVerified: true,
+      faceConfidence: knownProfile.faceConfidence || "98%",
+      faceType: "Known Visitor",
+      riskScore: knownProfile.riskScore || 10,
+      riskLabel: knownProfile.riskLabel || "Low Risk",
+      repeatVisitor: true,
+    };
+
+    setVisitorForm((prev) => ({
+      ...prev,
+      name: updatedDraft.name,
+      mobile: updatedDraft.mobile,
+      flat: updatedDraft.flat,
+      purpose: updatedDraft.purpose,
+      gate: updatedDraft.gate,
+    }));
+
+    setActiveVisitor(updatedDraft);
+  }, [screen, normalizedVisitorMobile, knownProfile?.completedProfile]);
+
+  useEffect(() => {
+    setScreen("login");
+    setActiveVisitor(null);
+    stopCamera();
+  }, [resetSerial]);
 
   useEffect(() => {
     if (screen === "visitorPass" && activeVisitor?.status === "inside" && activeVisitor?.purpose.toLowerCase().includes("delivery")) {
@@ -662,15 +835,17 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     const visitor = {
       id: Date.now(),
       ...visitorForm,
-      name: profile?.name || visitorForm.name,
-      flat: profile?.flat || visitorForm.flat,
-      purpose: profile?.purpose || visitorForm.purpose,
-      gate: profile?.gate || visitorForm.gate,
+      name: profile?.name || draftSource?.name || visitorForm.name,
+      mobile: profile?.mobile || draftSource?.mobile || normalizeMobile(visitorForm.mobile),
+      flat: profile?.flat || draftSource?.flat || visitorForm.flat,
+      purpose: profile?.purpose || draftSource?.purpose || visitorForm.purpose,
+      gate: profile?.gate || draftSource?.gate || visitorForm.gate,
       photoCaptured: hasCapturedFace,
+      photoUrl: profile?.photoUrl || draftSource?.photoUrl || "",
       faceVerified: hasCapturedFace,
-      faceConfidence: hasCapturedFace ? (draftSource?.faceConfidence || profile?.faceConfidence || "98%") : "--",
+      faceConfidence: hasCapturedFace ? (profile?.faceConfidence || draftSource?.faceConfidence || "98%") : "--",
       faceType: profile ? "Known Visitor" : hasCapturedFace ? (draftSource?.faceType || "First Time Visitor") : "Not Scanned",
-      riskScore: profile ? (profile.riskScore || 12) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
+      riskScore: profile ? (profile.riskScore || 10) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
       riskLabel: profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
       repeatVisitor: !!profile,
       status: "pending",
@@ -718,35 +893,6 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     notify("Visitor auto closed");
   };
 
-  const captureFaceDemo = () => {
-    const mobileKey = normalizeMobile(visitorForm.mobile);
-    const draft = {
-      id: Date.now(),
-      name: visitorForm.name,
-      mobile: mobileKey,
-      flat: visitorForm.flat,
-      purpose: visitorForm.purpose,
-      gate: visitorForm.gate,
-      status: "draft",
-      requestTime: "11:45 AM",
-      approvedBy: "--",
-      approvedAt: "--",
-      entryTime: "--",
-      exitTime: "--",
-      passId: `SG-${Date.now().toString().slice(-5)}`,
-      photoCaptured: true,
-      faceVerified: true,
-      faceConfidence: "98%",
-      faceType: "First Time Visitor",
-      riskScore: 30,
-      riskLabel: "Medium Risk",
-    };
-
-    setActiveVisitor(draft);
-    addLog(`AI Face Recognition completed for ${draft.name}: 98% confidence, Medium Risk`);
-    notify("Face captured and verified");
-  };
-
   const createVehicle = () => {
     const vehicle = {
       id: Date.now(),
@@ -788,7 +934,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
   if (screen === "add") return (
     <PhoneShell dark>
-      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll relative">
         <HeaderBack title="Add Visitor" subtitle="Create approval request" dark onBack={() => setScreen("dashboard")} />
         <div className="space-y-3">
           <DarkTextInput label="Visitor Name" value={visitorForm.name} onChange={(v) => setVisitorForm((p) => ({ ...p, name: v }))} />
@@ -797,10 +943,19 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
           {knownProfile?.completedProfile && (
             <Card className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 border-emerald-400/30 text-white shadow-xl">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-black text-emerald-300">Known Visitor Found</p>
-                  <p className="text-sm text-slate-300">{knownProfile.name} • {knownProfile.flat}</p>
-                  <p className="text-xs text-cyan-300 mt-1">Face Match: {knownProfile.faceConfidence} • No recapture needed</p>
+                <div className="flex items-center gap-3">
+                  {knownProfile.photoUrl ? (
+                    <img src={knownProfile.photoUrl} alt="Known visitor" className="h-12 w-12 rounded-2xl object-cover border border-emerald-300/40" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center font-black text-emerald-300">
+                      {initials(knownProfile.name)}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-black text-emerald-300">Known Visitor Found</p>
+                    <p className="text-sm text-slate-300">{knownProfile.name} • {knownProfile.flat}</p>
+                    <p className="text-xs text-cyan-300 mt-1">Face Match: {knownProfile.faceConfidence} • No recapture needed</p>
+                  </div>
                 </div>
                 <Button onClick={applyKnownVisitorProfile} variant="success" className="py-2 px-3 text-xs">
                   Auto Fetch
@@ -811,16 +966,24 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
           <DarkTextInput label="Flat No." value={visitorForm.flat} onChange={(v) => setVisitorForm((p) => ({ ...p, flat: v }))} />
           <DarkTextInput label="Purpose" value={visitorForm.purpose} onChange={(v) => setVisitorForm((p) => ({ ...p, purpose: v }))} />
-          <button onClick={captureFaceDemo} className="rounded-2xl border border-dashed border-slate-700 p-6 text-center text-slate-400 w-full hover:border-cyan-400/60 hover:bg-slate-900 transition">
+          <button onClick={openCamera} className="rounded-2xl border border-dashed border-slate-700 p-6 text-center text-slate-400 w-full hover:border-cyan-400/60 hover:bg-slate-900 transition">
             <div className="flex items-center justify-center gap-2"><Camera size={20} /> Capture Visitor Image</div>
           </button>
 
           {showCurrentFaceCard && (
             <Card className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 border-cyan-400/30 text-white shadow-xl">
               <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">
-                  {initials(activeVisitor?.name || visitorForm.name)}
-                </div>
+                {activeVisitor?.photoUrl ? (
+                  <img
+                    src={activeVisitor.photoUrl}
+                    alt="Captured visitor"
+                    className="h-16 w-16 rounded-2xl object-cover border border-cyan-300/40"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">
+                    {initials(activeVisitor?.name || visitorForm.name)}
+                  </div>
+                )}
                 <div>
                   <p className="font-black">AI Face Recognition</p>
                   <p className="text-sm text-slate-300">Visitor image captured</p>
@@ -845,6 +1008,55 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
               </div>
             </Card>
           )}
+
+          <AnimatePresence>
+            {cameraOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 bg-slate-950/95 p-5 flex flex-col"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-xs text-cyan-300 font-bold uppercase">Live Camera</p>
+                    <h3 className="text-xl font-black text-white">
+                      {cameraFacing === "environment" ? "Back Camera" : "Front Camera"}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Mobile opens back camera first. Laptop opens front camera.
+                    </p>
+                  </div>
+                  <button onClick={closeCamera} className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="flex-1 rounded-3xl overflow-hidden border border-cyan-400/30 bg-slate-900 flex items-center justify-center">
+                  {cameraError ? (
+                    <div className="text-center p-5">
+                      <AlertTriangle className="mx-auto text-amber-300" size={42} />
+                      <p className="text-white font-bold mt-3">{cameraError}</p>
+                      <p className="text-slate-400 text-sm mt-2">You can continue with demo verification.</p>
+                    </div>
+                  ) : (
+                    <video ref={videoRef} className="h-full w-full object-cover" autoPlay playsInline muted />
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                  <Button onClick={closeCamera} variant="ghost">Cancel</Button>
+                  <Button onClick={flipCamera} variant="navy">Flip</Button>
+                  <Button
+                    onClick={cameraError ? () => { captureFaceDemo(""); closeCamera(); } : takeSnapshot}
+                    variant="success"
+                  >
+                    <Camera size={16} /> {cameraError ? "Use Demo" : "Snapshot"}
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <Button onClick={createVisitor} className="w-full" variant="success">Send Approval Request</Button>
         </div>
@@ -901,13 +1113,21 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
 
   if (screen === "visitorPass") return (
     <PhoneShell dark>
-      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll">
+      <div className="h-full bg-slate-950 text-white p-5 overflow-y-auto sg-scroll relative">
         <HeaderBack title="Visitor Pass" subtitle="Approved visitor details" dark onBack={() => setScreen("dashboard")} />
         {activeVisitor && (
           <>
             <Card className="p-5 bg-slate-900 border-slate-800 text-white">
               <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">{initials(activeVisitor.name)}</div>
+                {activeVisitor.photoUrl ? (
+                  <img
+                    src={activeVisitor.photoUrl}
+                    alt="Visitor"
+                    className="h-16 w-16 rounded-full object-cover border border-cyan-300/40"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-cyan-400 flex items-center justify-center text-2xl font-black">{initials(activeVisitor.name)}</div>
+                )}
                 <div>
                   <h3 className="text-xl font-black">{activeVisitor.name}</h3>
                   <p className="text-slate-400 text-sm">{activeVisitor.purpose} • {activeVisitor.flat}</p>
