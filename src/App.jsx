@@ -112,6 +112,34 @@ const getSecurityRisk = (mobile = "") => {
 };
 
 
+const normalizeVehicleNumber = (number = "") =>
+  String(number).toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+const WATCHLIST_VEHICLES = ["DL8CAF0001", "UP14ZZ9999", "MH01ZZ0007"];
+
+const getVehicleSecurityRisk = (number = "") => {
+  const normalized = normalizeVehicleNumber(number);
+  if (WATCHLIST_VEHICLES.includes(normalized)) {
+    return {
+      watchlisted: true,
+      riskScore: 95,
+      riskLabel: "High Risk",
+      vehicleType: "Watchlist Vehicle",
+      securityReason: "Vehicle number is present in society watchlist",
+      securityRecommendation: "Security verification required",
+    };
+  }
+  return {
+    watchlisted: false,
+    riskScore: null,
+    riskLabel: null,
+    vehicleType: null,
+    securityReason: "",
+    securityRecommendation: "",
+  };
+};
+
+
 const visitorBadge = (status) => {
   if (["approved", "inside"].includes(status)) return "bg-emerald-100 text-emerald-700";
   if (status === "pending") return "bg-blue-100 text-blue-700";
@@ -576,7 +604,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   );
 }
 
-function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, resetSerial, addLog, notify }) {
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, knownVehicles = {}, setKnownVehicles, resetSerial, addLog, notify }) {
   const [screen, setScreen] = useState("login");
   const [visitorForm, setVisitorForm] = useState({
     name: "Ramesh Kumar",
@@ -597,6 +625,16 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   const [cameraFacing, setCameraFacing] = useState("environment");
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  const normalizedVehicleNumber = normalizeVehicleNumber(vehicleForm.number);
+  const knownVehicleProfile =
+    normalizedVehicleNumber.length >= 6 &&
+    knownVehicles?.[normalizedVehicleNumber]?.completedProfile === true
+      ? knownVehicles[normalizedVehicleNumber]
+      : undefined;
+
+  const vehicleSecurityRisk = getVehicleSecurityRisk(vehicleForm.number);
+  const isWatchlistVehicle = vehicleSecurityRisk.watchlisted;
 
   const normalizedVisitorMobile = normalizeMobile(visitorForm.mobile);
   const knownProfile =
@@ -835,7 +873,13 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
       },
     }));
 
-    addLog(`Known visitor profile saved for ${visitor.name} (${mobileKey})`);
+    if (visitor.blacklisted) {
+      addLog(`🚨 Blacklisted visitor detected: ${visitor.name} (${mobileKey}) • Risk Score 95%`);
+    } else if (visitor.suspicious) {
+      addLog(`⚠ Suspicious visitor activity: ${visitor.name} (${mobileKey}) • ${visitor.suspiciousType || "Security verification recommended"}`);
+    } else {
+      addLog(`Known visitor profile saved for ${visitor.name} (${mobileKey})`);
+    }
   };
 
   useEffect(() => {
@@ -1003,7 +1047,15 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         };
       });
     }
-    addLog(`Guard sent visitor approval request for ${visitor.name} (${visitor.flat})${profile ? " • Known visitor auto-fetched" : ""}`);
+    addLog(
+      requestBlacklisted
+        ? `🚨 Blacklisted visitor approval request: ${visitor.name} (${visitor.mobile}) • Risk Score 95%`
+        : visitor.suspicious
+        ? `⚠ Suspicious visitor approval request: ${visitor.name} (${visitor.mobile}) • ${visitor.suspiciousType}`
+        : profile
+        ? `Known visitor approval request: ${visitor.name} (${visitor.flat})`
+        : `Guard sent visitor approval request for ${visitor.name} (${visitor.flat})`
+    );
     notify(profile ? "Known visitor request sent" : "Approval request sent");
     setScreen("waiting");
   };
@@ -1037,19 +1089,94 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     notify("Visitor auto closed");
   };
 
+  const saveCompletedKnownVehicleProfile = (vehicle) => {
+    const vehicleKey = normalizeVehicleNumber(vehicle?.number);
+    if (!vehicleKey || vehicleKey.length < 6) return;
+
+    const vehicleRisk = getVehicleSecurityRisk(vehicleKey);
+    setKnownVehicles((prev) => ({
+      ...prev,
+      [vehicleKey]: {
+        number: vehicleKey,
+        flat: vehicle.flat,
+        purpose: vehicle.purpose,
+        gate: vehicle.gate,
+        vehicleType: vehicleRisk.watchlisted ? "Watchlist Vehicle" : "Known Vehicle",
+        riskScore: vehicleRisk.watchlisted ? 95 : 10,
+        riskLabel: vehicleRisk.watchlisted ? "High Risk" : "Low Risk",
+        watchlisted: vehicleRisk.watchlisted,
+        securityReason: vehicleRisk.securityReason,
+        securityRecommendation: vehicleRisk.securityRecommendation,
+        completedProfile: true,
+      },
+    }));
+    if (vehicle.watchlisted || vehicleRisk.watchlisted) {
+      addLog(`🚨 Watchlist vehicle detected: ${vehicleKey} • Risk Score 95%`);
+    } else {
+      addLog(`Known vehicle profile saved for ${vehicleKey} (${vehicle.flat})`);
+    }
+  };
+
+  const applyKnownVehicleProfile = () => {
+    const profile = knownVehicleProfile;
+    if (!profile) {
+      notify("No saved vehicle profile found");
+      return;
+    }
+    setVehicleForm((prev) => ({
+      ...prev,
+      number: profile.number || prev.number,
+      flat: profile.flat || prev.flat,
+      purpose: profile.purpose || prev.purpose,
+      gate: profile.gate || prev.gate,
+    }));
+    notify("Known vehicle auto-fetched");
+    addLog(`Known vehicle auto-fetched: ${profile.number} for ${profile.flat}`);
+  };
+
+  useEffect(() => {
+    if (screen !== "vehicle" || !knownVehicleProfile) return;
+    setVehicleForm((prev) => ({
+      ...prev,
+      number: knownVehicleProfile.number || prev.number,
+      flat: knownVehicleProfile.flat || prev.flat,
+      purpose: knownVehicleProfile.purpose || prev.purpose,
+      gate: knownVehicleProfile.gate || prev.gate,
+    }));
+  }, [screen, normalizedVehicleNumber, knownVehicleProfile?.completedProfile]);
+
   const createVehicle = () => {
+    const vehicleRisk = getVehicleSecurityRisk(vehicleForm.number);
+    const vehicleProfile = knownVehicleProfile;
     const vehicle = {
       id: Date.now(),
       ...vehicleForm,
+      number: normalizeVehicleNumber(vehicleProfile?.number || vehicleForm.number),
+      flat: vehicleProfile?.flat || vehicleForm.flat,
+      purpose: vehicleProfile?.purpose || vehicleForm.purpose,
+      gate: vehicleProfile?.gate || vehicleForm.gate,
       status: "in",
       inTime: "11:10 AM",
       outTime: "--",
       passId: `VH-${Date.now().toString().slice(-5)}`,
+      knownVehicle: !!vehicleProfile && !vehicleRisk.watchlisted,
+      watchlisted: vehicleRisk.watchlisted,
+      vehicleType: vehicleRisk.watchlisted ? "Watchlist Vehicle" : vehicleProfile ? "Known Vehicle" : "First Time Vehicle",
+      riskScore: vehicleRisk.watchlisted ? 95 : vehicleProfile ? 10 : 30,
+      riskLabel: vehicleRisk.watchlisted ? "High Risk" : vehicleProfile ? "Low Risk" : "Medium Risk",
+      securityReason: vehicleRisk.securityReason,
+      securityRecommendation: vehicleRisk.securityRecommendation,
     };
     setActiveVehicle(vehicle);
     saveVehicle(vehicle);
-    addLog(`Vehicle ${vehicle.number} entered for ${vehicle.flat}`);
-    notify("Vehicle pass created");
+    addLog(
+      vehicleRisk.watchlisted
+        ? `🚨 Watchlist vehicle entry attempted: ${vehicle.number} for ${vehicle.flat} • Risk Score 95%`
+        : vehicleProfile
+        ? `Known vehicle entered: ${vehicle.number} for ${vehicle.flat}`
+        : `Vehicle ${vehicle.number} entered for ${vehicle.flat}`
+    );
+    notify(vehicleRisk.watchlisted ? "Watchlist vehicle detected" : vehicleProfile ? "Known vehicle pass created" : "Vehicle pass created");
     setScreen("vehiclePass");
   };
 
@@ -1058,6 +1185,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     const updated = { ...activeVehicle, status: "out", outTime: "12:05 PM" };
     setActiveVehicle(updated);
     saveVehicle(updated);
+    saveCompletedKnownVehicleProfile(updated);
     addLog(`Vehicle ${updated.number} marked OUT`);
     notify("Vehicle exit marked");
   };
@@ -1398,6 +1526,35 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         <HeaderBack title="Vehicle Entry" subtitle="Create vehicle pass" dark onBack={() => setScreen("dashboard")} />
         <div className="space-y-3">
           <DarkTextInput label="Vehicle Number" value={vehicleForm.number} onChange={(v) => setVehicleForm((p) => ({ ...p, number: v }))} />
+
+          {knownVehicleProfile?.completedProfile && (
+            <Card className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 border-emerald-400/30 text-white shadow-xl">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className={isWatchlistVehicle ? "font-black text-red-300" : "font-black text-emerald-300"}>{isWatchlistVehicle ? "Known Vehicle Found • Watchlist Match" : "Known Vehicle Found"}</p>
+                  <p className="text-sm text-slate-300">{knownVehicleProfile.number} • {knownVehicleProfile.flat}</p>
+                  <p className={isWatchlistVehicle ? "text-xs text-red-200 mt-1" : "text-xs text-cyan-300 mt-1"}>{isWatchlistVehicle ? "Watchlist Vehicle • Risk 95%" : "Auto fetch enabled • Low Risk"}</p>
+                </div>
+                <Button onClick={applyKnownVehicleProfile} variant="success" className="py-2 px-3 text-xs">Auto Fetch</Button>
+              </div>
+            </Card>
+          )}
+
+          {isWatchlistVehicle && (
+            <Card className="p-4 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/40 text-white shadow-xl shadow-red-950/30">
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="text-red-300 animate-pulse" size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-red-300">VEHICLE SECURITY ALERT</p>
+                  <p className="text-sm text-white mt-1">Watchlist Vehicle Detected</p>
+                  <p className="text-xs text-red-200 mt-1">Risk Score: 95% • Security verification required</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
           <DarkTextInput label="Flat No." value={vehicleForm.flat} onChange={(v) => setVehicleForm((p) => ({ ...p, flat: v }))} />
           <DarkTextInput label="Purpose" value={vehicleForm.purpose} onChange={(v) => setVehicleForm((p) => ({ ...p, purpose: v }))} />
           <Button onClick={createVehicle} className="w-full" variant="success">Create Vehicle Pass</Button>
@@ -1428,6 +1585,29 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
                 <p className="font-black mt-2">{activeVehicle.passId}</p>
                 <p className="text-xs text-slate-500">Vehicle QR pass</p>
               </div>
+            </Card>
+
+            <Card className={`mt-5 p-5 text-white shadow-xl ${activeVehicle.watchlisted ? "bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/30 shadow-red-950/30" : "bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 border-cyan-400/30"}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-black text-white">Vehicle Intelligence</p>
+                  <p className="text-sm text-slate-300">AI vehicle risk and repeat detection</p>
+                </div>
+                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${activeVehicle.watchlisted ? "bg-red-500/20" : "bg-cyan-500/20"}`}>
+                  <Car className={activeVehicle.watchlisted ? "text-red-300" : "text-cyan-300"} size={30} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Type</p><b className={activeVehicle.watchlisted ? "text-red-300" : "text-cyan-300"}>{activeVehicle.vehicleType || "First Time Vehicle"}</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Risk</p><b className={activeVehicle.riskScore > 70 ? "text-red-300" : activeVehicle.riskScore > 30 ? "text-amber-300" : "text-emerald-300"}>{activeVehicle.riskScore || 30}%</b></div>
+                <div className="rounded-2xl bg-slate-950 p-3"><p className="text-slate-500">Status</p><b className={activeVehicle.watchlisted ? "text-red-300" : "text-emerald-300"}>{activeVehicle.watchlisted ? "Watchlist" : "Verified"}</b></div>
+              </div>
+              {activeVehicle.watchlisted && (
+                <div className="mt-4 rounded-2xl bg-red-500/10 border border-red-500/30 p-3">
+                  <p className="text-sm font-black text-red-300">Watchlist Vehicle Alert</p>
+                  <p className="text-xs text-red-200 mt-1">{activeVehicle.securityReason || "Vehicle is present in watchlist."}</p>
+                </div>
+              )}
             </Card>
 
             {activeVehicle.status === "in" ? (
@@ -1470,7 +1650,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         </div>
         <div className="grid grid-cols-2 gap-3 mt-6">
           <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Visitor Status</p><p className="text-xl font-black mt-1">{activeVisitor?.status || "none"}</p></Card>
-          <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Vehicle</p><p className="text-xl font-black mt-1">{activeVehicle?.status || "none"}</p></Card>
+          <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Vehicle</p><p className="text-xl font-black mt-1">{activeVehicle?.watchlisted ? "watchlist" : activeVehicle?.knownVehicle ? "known" : activeVehicle?.status || "none"}</p></Card>
         </div>
         {activeVisitor && ["approved", "inside", "exited", "auto closed", "wrong entry"].includes(activeVisitor.status) && (
           <Button onClick={() => activeVisitor.status === "approved" ? setScreen("waiting") : setScreen("visitorPass")} className="w-full mt-5" variant="success">
@@ -1483,7 +1663,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, logs, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, logs, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
@@ -1496,6 +1676,29 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
     { flat: "B-804", name: "Priya Sharma", type: "Tenant", due: "₹4,500", status: "Active" },
     { flat: "C-502", name: "Rohit Verma", type: "Owner", due: "₹0", status: "Active" },
   ]);
+
+  const allSecurityVisitors = [
+    ...(activeVisitor ? [activeVisitor] : []),
+    ...visitorHistory.filter((v) => !activeVisitor || v.id !== activeVisitor.id),
+  ];
+  const allSecurityVehicles = [
+    ...(activeVehicle ? [activeVehicle] : []),
+    ...vehicleHistory.filter((v) => !activeVehicle || v.id !== activeVehicle.id),
+  ];
+  const blacklistedVisitorCount = allSecurityVisitors.filter((v) => v.blacklisted).length;
+  const suspiciousVisitorCount = allSecurityVisitors.filter((v) => v.suspicious).length;
+  const watchlistVehicleCount = allSecurityVehicles.filter((v) => v.watchlisted).length;
+  const totalSecurityAlerts = blacklistedVisitorCount + suspiciousVisitorCount + watchlistVehicleCount;
+  const lastSecurityAlert =
+    allSecurityVehicles.find((v) => v.watchlisted)?.number ||
+    allSecurityVisitors.find((v) => v.blacklisted || v.suspicious)?.name ||
+    "None";
+  const suspiciousAiAnswer =
+    totalSecurityAlerts > 0
+      ? `Yes. ${blacklistedVisitorCount} blacklisted visitor(s), ${suspiciousVisitorCount} suspicious visitor attempt(s), and ${watchlistVehicleCount} watchlist vehicle alert(s) detected. Last alert: ${lastSecurityAlert}.`
+      : "No critical suspicious activity right now.";
+  const knownVehicleCount = Object.keys(knownVehicles || {}).length;
+  const activeVehicleCount = allSecurityVehicles.filter((v) => v.status === "in").length;
 
   const visitorsToday = 42 + visitorHistory.length;
   const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
@@ -1565,25 +1768,26 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
         {section === "dashboard" && (
           <div className="mt-7">
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Security Alerts", visitorHistory.filter((v) => v.blacklisted || v.suspicious || (v.riskScore || 0) >= 65).length + ((activeVisitor?.blacklisted || activeVisitor?.suspicious) ? 1 : 0)], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
+              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Security Alerts", totalSecurityAlerts], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
                 <Card key={title} className="p-4"><p className="text-xs text-slate-500">{title}</p><p className="text-2xl font-black text-slate-950 mt-2">{value}</p></Card>
               ))}
             </div>
-            {((activeVisitor?.blacklisted || activeVisitor?.suspicious) || visitorHistory.some((v) => v.blacklisted || v.suspicious)) && (
+            {totalSecurityAlerts > 0 && (
               <Card className="p-5 mt-5 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/30 text-white shadow-xl shadow-red-950/30">
                 <div className="flex items-center gap-3">
                   <ShieldAlert className="text-red-300 animate-pulse" size={30} />
                   <div>
                     <h3 className="font-black text-white">Security Intelligence Alert</h3>
                     <p className="text-sm text-red-200">
-                      Security intelligence detected watchlist or suspicious visitor activity
+                      Security intelligence detected visitor or vehicle watchlist activity
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
-                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Blacklisted</p><b>{visitorHistory.filter((v) => v.blacklisted).length + (activeVisitor?.blacklisted ? 1 : 0)}</b></div>
-                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Suspicious</p><b>{visitorHistory.filter((v) => v.suspicious).length + (activeVisitor?.suspicious ? 1 : 0)}</b></div>
-                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Last Alert</p><b>{(activeVisitor?.blacklisted || activeVisitor?.suspicious) ? activeVisitor.name : visitorHistory.find((v) => v.blacklisted || v.suspicious)?.name || "None"}</b></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-sm">
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Blacklisted</p><b>{blacklistedVisitorCount}</b></div>
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Suspicious</p><b>{suspiciousVisitorCount}</b></div>
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Vehicle Watchlist</p><b>{watchlistVehicleCount}</b></div>
+                  <div className="rounded-2xl bg-slate-950/70 p-3"><p className="text-red-200">Last Alert</p><b>{lastSecurityAlert}</b></div>
                 </div>
               </Card>
             )}
@@ -1850,14 +2054,12 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
                   </p>
                 </div>
 
-                <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4 min-h-[150px]">
-                  <div className="flex items-center gap-2"><Car className="text-emerald-600" /><b className="text-emerald-900">Vehicle Intelligence</b></div>
+                <div className="rounded-3xl bg-purple-50 border border-purple-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><Car className="text-purple-600" /><b className="text-purple-900">Vehicle Intelligence</b></div>
                   <p className="text-sm text-slate-600 mt-2">
-                    {activeVehicle?.status === "in"
-                      ? `Vehicle ${activeVehicle.number} is currently inside. Exit tracking is active.`
-                      : activeVehicle?.status === "out"
-                      ? `Vehicle ${activeVehicle.number} has exited successfully.`
-                      : "No unusual vehicle movement detected."}
+                    Known Vehicles: {knownVehicleCount}<br />
+                    Active Vehicles: {activeVehicleCount}<br />
+                    Watchlist Vehicles: {watchlistVehicleCount}
                   </p>
                 </div>
 
@@ -1884,7 +2086,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
                 {[
                   ["How many visitors today?", `${visitorsToday} visitors logged today.`],
-                  ["Any suspicious activity?", activeVisitor?.status === "wrong entry" ? "Yes. Wrong entry reported by resident A-1204." : "No critical suspicious activity right now."],
+                  ["Any suspicious activity?", suspiciousAiAnswer],
                   ["Which flats have dues?", `${overdueFlats} flats are overdue. A-1204 is ${billPaid ? "paid" : "pending"}.`],
                   ["What should admin do next?", "Review security logs, send billing reminders, and schedule lift maintenance."]
                 ].map(([q, a]) => (
@@ -1934,6 +2136,7 @@ export default function SocioGateClickableDemo() {
   const [vehicleHistory, setVehicleHistory] = useState([]);
   const [knownVisitors, setKnownVisitors] = useState({});
   const [visitorAttempts, setVisitorAttempts] = useState({});
+  const [knownVehicles, setKnownVehicles] = useState({});
   const [billPaid, setBillPaid] = useState(false);
   const [logs, setLogs] = useState([]);
   const [toast, setToast] = useState("");
@@ -1964,6 +2167,7 @@ export default function SocioGateClickableDemo() {
     setVehicleHistory([]);
     setKnownVisitors({});
     setVisitorAttempts({});
+    setKnownVehicles({});
     setBillPaid(false);
     setLogs([]);
     setResetKey((k) => k + 1);
@@ -1999,7 +2203,7 @@ export default function SocioGateClickableDemo() {
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
           {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
-          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
+          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
           {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} logs={logs} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
