@@ -253,7 +253,7 @@ function Toast({ toast, clear }) {
   );
 }
 
-function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, sosAlerts = [], setSosAlerts, addLog, notify, billPaid, setBillPaid }) {
+function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, sosAlerts = [], setSosAlerts, notices = [], communityPolls = [], setCommunityPolls, addLog, notify, billPaid, setBillPaid }) {
   const [screen, setScreen] = useState("splash");
   const [showPopup, setShowPopup] = useState(false);
   const [complaintRaised, setComplaintRaised] = useState(false);
@@ -264,8 +264,14 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     arrival: "5:30 PM",
   });
   const [lastPreApproval, setLastPreApproval] = useState(null);
+  const [seenNoticeIds, setSeenNoticeIds] = useState([]);
+  const [dismissedPollIds, setDismissedPollIds] = useState([]);
   const latest = activeVisitor || visitorHistory[0];
   const activeSosAlert = sosAlerts.find((s) => s.status === "active");
+  const latestUnreadNotice = notices.find((n) => !seenNoticeIds.includes(n.id));
+  const latestPendingPoll = communityPolls.find((p) => !p.votedOption && !dismissedPollIds.includes(p.id));
+  const unreadNoticeCount = notices.filter((n) => !seenNoticeIds.includes(n.id)).length;
+  const pendingPollCount = communityPolls.filter((p) => !p.votedOption).length;
 
   useEffect(() => {
     if (screen === "dashboard" && activeVisitor?.status === "pending") setShowPopup(true);
@@ -377,6 +383,47 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     setLastPreApproval(pass);
     addLog(`Resident pre-approved ${pass.name} (${mobileKey}) for ${pass.flat}`);
     notify("Visitor pre-approved");
+  };
+
+  const voteCommunityPoll = (pollId, optionLabel) => {
+    if (typeof setCommunityPolls !== "function") return;
+    setCommunityPolls((prev) =>
+      prev.map((poll) => {
+        if (poll.id !== pollId) return poll;
+
+        const previousVote = poll.votedOption;
+        if (previousVote === optionLabel) {
+          notify("Same option already selected");
+          return poll;
+        }
+
+        return {
+          ...poll,
+          votedOption: optionLabel,
+          options: poll.options.map((opt) => {
+            if (opt.label === optionLabel) return { ...opt, votes: opt.votes + 1 };
+            if (opt.label === previousVote) return { ...opt, votes: Math.max(0, opt.votes - 1) };
+            return opt;
+          }),
+        };
+      })
+    );
+    addLog(`Resident updated community poll vote: ${optionLabel}`);
+    notify("Vote updated");
+  };
+
+  const markNoticeRead = (noticeId) => {
+    setSeenNoticeIds((prev) => Array.from(new Set([...prev, noticeId])));
+  };
+
+  const openNoticeFromPopup = (noticeId) => {
+    markNoticeRead(noticeId);
+    setScreen("notices");
+  };
+
+  const openPollFromPopup = (pollId) => {
+    setDismissedPollIds((prev) => Array.from(new Set([...prev, pollId])));
+    setScreen("polls");
   };
 
   const DashboardCard = ({ Icon, title, sub, onClick, urgent }) => (
@@ -581,12 +628,103 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     return (
       <PhoneShell>
         <div className="h-full p-5 overflow-y-auto sg-scroll">
-          <HeaderBack title="Notices" subtitle="Society announcements" onBack={() => setScreen("dashboard")} />
-          {["Water tank cleaning tomorrow from 10 AM to 1 PM", "AGM meeting on Sunday, 6 PM at clubhouse", "New parking stickers available from admin office"].map((n, i) => (
-            <Card key={i} className="p-4 mt-3">
-              <div className="flex gap-3"><Megaphone className="text-blue-600" /><div><p className="font-bold">{n}</p><p className="text-xs text-slate-500 mt-1">Admin • Green Meadows Society</p></div></div>
-            </Card>
-          ))}
+          <HeaderBack title="Notice Board" subtitle="Society announcements" onBack={() => setScreen("dashboard")} />
+
+          <Card className="p-4 bg-blue-50 border-blue-100">
+            <div className="flex gap-3">
+              <Megaphone className="text-blue-600 shrink-0" size={26} />
+              <div>
+                <p className="font-black text-blue-900">Society Notices</p>
+                <p className="text-sm text-slate-600 mt-1">{unreadNoticeCount} unread of {notices.length} notice(s)</p>
+              </div>
+            </div>
+          </Card>
+
+          <div className="mt-4 space-y-3">
+            {notices.length ? notices.map((n) => {
+              const isUnread = !seenNoticeIds.includes(n.id);
+              return (
+                <Card key={n.id} className={`p-4 ${isUnread ? "border-blue-200 bg-blue-50" : ""}`}>
+                  <div className="flex gap-3">
+                    <Megaphone className={isUnread ? "text-blue-600 shrink-0" : "text-slate-500 shrink-0"} size={22} />
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-black text-slate-950">{n.title}</p>
+                        {isUnread && <span className="text-[10px] rounded-full bg-blue-600 text-white px-2 py-1 font-bold">NEW</span>}
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">{n.body}</p>
+                      <p className="text-xs text-slate-400 mt-2">{n.category} • {n.createdBy} • {n.createdAt}</p>
+                      {isUnread && (
+                        <Button onClick={() => markNoticeRead(n.id)} variant="ghost" className="mt-3 py-2 text-xs">
+                          <CheckCircle2 size={14} /> Mark as Read
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            }) : <Card className="p-4"><p className="text-sm text-slate-500">No notices available.</p></Card>}
+          </div>
+        </div>
+      </PhoneShell>
+    );
+  }
+
+  if (screen === "polls") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="Community Polls" subtitle="Vote and view live results" onBack={() => setScreen("dashboard")} />
+
+          <Card className="p-4 bg-emerald-50 border-emerald-100">
+            <div className="flex gap-3">
+              <BarChart3 className="text-emerald-600 shrink-0" size={26} />
+              <div>
+                <p className="font-black text-emerald-900">Community Decisions</p>
+                <p className="text-sm text-slate-600 mt-1">{pendingPollCount} pending vote(s)</p>
+              </div>
+            </div>
+          </Card>
+
+          <div className="mt-4 space-y-3">
+            {communityPolls.length ? communityPolls.map((poll) => {
+              const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0) || 1;
+              return (
+                <Card key={poll.id} className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-black text-slate-950">{poll.question}</p>
+                      <p className="text-xs text-slate-400 mt-1">{poll.status} • {poll.createdBy}</p>
+                    </div>
+                    {!poll.votedOption && <span className="text-[10px] rounded-full bg-emerald-600 text-white px-2 py-1 font-bold">VOTE</span>}
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {poll.options.map((opt) => {
+                      const percent = Math.round((opt.votes / totalVotes) * 100);
+                      return (
+                        <button
+                          key={opt.label}
+                          onClick={() => voteCommunityPoll(poll.id, opt.label)}
+                          className={`w-full rounded-2xl border p-3 text-left active:scale-[0.99] transition ${poll.votedOption === opt.label ? "bg-emerald-100 border-emerald-300" : "bg-white border-slate-200 hover:bg-slate-50"}`}
+                        >
+                          <div className="flex justify-between text-sm">
+                            <b>{opt.label}</b>
+                            <span>{percent}%</span>
+                          </div>
+                          <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-full bg-emerald-500" style={{ width: `${percent}%` }} />
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">{opt.votes} vote(s)</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {poll.votedOption && <p className="text-xs text-emerald-700 font-bold mt-3">You voted: {poll.votedOption}. Tap another option to change your vote.</p>}
+                </Card>
+              );
+            }) : <Card className="p-4"><p className="text-sm text-slate-500">No active polls.</p></Card>}
+          </div>
         </div>
       </PhoneShell>
     );
@@ -638,7 +776,8 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
             <DashboardCard Icon={BadgeCheck} title="Pre-Approve" sub={`${Object.keys(preApprovedVisitors).length} active`} onClick={() => setScreen("preapprove")} />
             <DashboardCard Icon={Wallet} title="Bills" sub={billPaid ? "All paid" : "₹4,500 due"} onClick={() => setScreen("bills")} />
             <DashboardCard Icon={MessageSquareWarning} title="Complaints" sub={complaintRaised ? "2 active" : "1 active"} onClick={() => setScreen("complaints")} />
-            <DashboardCard Icon={Megaphone} title="Notices" sub="3 new" onClick={() => setScreen("notices")} />
+            <DashboardCard Icon={Megaphone} title="Notices" sub={`${unreadNoticeCount} unread`} urgent={unreadNoticeCount > 0} onClick={() => setScreen("notices")} />
+            <DashboardCard Icon={BarChart3} title="Polls" sub={`${pendingPollCount} pending`} urgent={pendingPollCount > 0} onClick={() => setScreen("polls")} />
             <DashboardCard Icon={Siren} title="SOS" sub={activeSosAlert ? "Active emergency" : "Emergency ready"} urgent={!!activeSosAlert} onClick={() => setScreen("sos")} />
           </div>
 
@@ -704,13 +843,45 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
         </div>
 
         <div className="shrink-0 bg-slate-950 border-t border-slate-800 px-3 py-3 flex justify-around text-slate-300 shadow-2xl">
-          {[[Home, "dashboard", "Home"], [UserCheck, "visitor", "Visitors"], [Wallet, "bills", "Bills"], [MessageSquareWarning, "complaints", "Complaints"], [UserRound, "profile", "Profile"]].map(([Icon, target, label], i) => (
-            <button key={target} onClick={() => target !== "visitor" ? setScreen(target) : activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} className="flex flex-col items-center gap-1 min-w-12">
+          {[[Home, "dashboard", "Home"], [Megaphone, "notices", "Notices"], [BarChart3, "polls", "Polls"], [Wallet, "bills", "Bills"], [MessageSquareWarning, "complaints", "Complaints"]].map(([Icon, target, label], i) => (
+            <button key={target} onClick={() => setScreen(target)} className="flex flex-col items-center gap-1 min-w-12">
               <Icon size={22} className={i === 0 ? "text-blue-400" : "text-slate-300"} />
               <span className={`text-[10px] font-semibold ${i === 0 ? "text-blue-400" : "text-slate-300"}`}>{label}</span>
             </button>
           ))}
         </div>
+
+        <AnimatePresence>
+          {latestUnreadNotice && screen === "dashboard" && (
+            <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }} className="absolute inset-x-4 top-6 rounded-3xl bg-white shadow-2xl border-2 border-blue-100 p-5 z-40">
+              <div className="flex justify-between">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">New Notice</p>
+                <button onClick={() => markNoticeRead(latestUnreadNotice.id)}><X size={18} /></button>
+              </div>
+              <h3 className="text-xl font-black mt-2">{latestUnreadNotice.title}</h3>
+              <p className="text-sm text-slate-600 mt-1">{latestUnreadNotice.body}</p>
+              <div className="grid grid-cols-2 gap-2 mt-5">
+                <Button onClick={() => openNoticeFromPopup(latestUnreadNotice.id)} className="py-3">View Notice</Button>
+                <Button onClick={() => markNoticeRead(latestUnreadNotice.id)} variant="ghost" className="py-3">Later</Button>
+              </div>
+            </motion.div>
+          )}
+
+          {!latestUnreadNotice && latestPendingPoll && screen === "dashboard" && (
+            <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }} className="absolute inset-x-4 top-6 rounded-3xl bg-white shadow-2xl border-2 border-emerald-100 p-5 z-40">
+              <div className="flex justify-between">
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide">New Community Poll</p>
+                <button onClick={() => setDismissedPollIds((prev) => Array.from(new Set([...prev, latestPendingPoll.id])))}><X size={18} /></button>
+              </div>
+              <h3 className="text-xl font-black mt-2">{latestPendingPoll.question}</h3>
+              <p className="text-sm text-slate-600 mt-1">Your vote helps the society committee make better decisions.</p>
+              <div className="grid grid-cols-2 gap-2 mt-5">
+                <Button onClick={() => openPollFromPopup(latestPendingPoll.id)} variant="success" className="py-3">Vote Now</Button>
+                <Button onClick={() => setDismissedPollIds((prev) => Array.from(new Set([...prev, latestPendingPoll.id])))} variant="ghost" className="py-3">Later</Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {showPopup && activeVisitor?.status === "pending" && (
@@ -1870,13 +2041,15 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, sosAlerts = [], setSosAlerts, logs, addLog, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, sosAlerts = [], setSosAlerts, notices = [], setNotices, communityPolls = [], setCommunityPolls, logs, addLog, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [aiAnswer, setAiAnswer] = useState("Click any AI question to see the answer here.");
   const [newResident, setNewResident] = useState({ flat: "D-1101", name: "Neha Gupta", type: "Owner", due: "₹0", status: "Active" });
+  const [newNotice, setNewNotice] = useState({ title: "Festival Celebration", body: "Society cultural evening at clubhouse this Saturday 7 PM.", category: "Event" });
+  const [newPoll, setNewPoll] = useState({ question: "Should we extend gym timing?", option1: "Yes", option2: "No", option3: "Weekend Only" });
   const [editingResident, setEditingResident] = useState(null);
   const [residents, setResidents] = useState([
     { flat: "A-1204", name: "Jagmeet Singh", type: "Owner", due: "₹4,500", status: "Active" },
@@ -1912,17 +2085,53 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
   const resolvedSosCount = sosAlerts.filter((s) => s.status === "resolved").length;
   const totalSosCount = sosAlerts.length;
   const latestSosAlert = sosAlerts.find((s) => s.status === "active") || sosAlerts[0];
+  const noticeCount = notices.length;
+  const activePollCount = communityPolls.filter((p) => p.status === "active").length;
+  const totalPollVotes = communityPolls.reduce((sum, poll) => sum + poll.options.reduce((s, o) => s + o.votes, 0), 0);
 
   const visitorsToday = 42 + visitorHistory.length;
   const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
   const pendingAmount = billPaid ? "₹3.65L" : "₹3.70L";
   const overdueFlats = billPaid ? "37" : "38";
-  const menu = [["dashboard", LayoutDashboard, "Dashboard"], ["residents", Building2, "Residents"], ["visitors", Users, "Visitors"], ["billing", ReceiptText, "Billing"], ["complaints", ClipboardList, "Complaints"], ["reports", BarChart3, "Reports"], ["ai", Bot, "AI Copilot"], ["settings", Settings, "Settings"]];
+  const menu = [["dashboard", LayoutDashboard, "Dashboard"], ["residents", Building2, "Residents"], ["visitors", Users, "Visitors"], ["billing", ReceiptText, "Billing"], ["complaints", ClipboardList, "Complaints"], ["reports", BarChart3, "Reports"], ["notices", Megaphone, "Notices"], ["polls", BarChart3, "Polls"], ["ai", Bot, "AI Copilot"], ["settings", Settings, "Settings"]];
   const SectionTitle = ({ title, sub }) => <div className="mb-5"><h2 className="text-2xl font-black text-slate-950">{title}</h2><p className="text-sm text-slate-500">{sub}</p></div>;
 
   const filteredResidents = residents
     .map((r) => r.flat === "A-1204" ? { ...r, due: billPaid ? "₹0" : "₹4,500" } : r)
     .filter((r) => `${r.flat} ${r.name} ${r.type} ${r.due} ${r.status}`.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const createAdminNotice = () => {
+    const notice = {
+      id: Date.now(),
+      title: newNotice.title || "Society Notice",
+      body: newNotice.body || "New society announcement.",
+      category: newNotice.category || "General",
+      createdBy: "Admin",
+      createdAt: "Now",
+    };
+    if (typeof setNotices === "function") setNotices((prev) => [notice, ...prev]);
+    addLog(`Admin published notice: ${notice.title}`);
+    notify("Notice published");
+  };
+
+  const createAdminPoll = () => {
+    const poll = {
+      id: Date.now(),
+      question: newPoll.question || "Community Poll",
+      options: [
+        { label: newPoll.option1 || "Yes", votes: 0 },
+        { label: newPoll.option2 || "No", votes: 0 },
+        { label: newPoll.option3 || "Need Discussion", votes: 0 },
+      ],
+      votedOption: "",
+      status: "active",
+      createdBy: "Admin",
+      createdAt: "Now",
+    };
+    if (typeof setCommunityPolls === "function") setCommunityPolls((prev) => [poll, ...prev]);
+    addLog(`Admin created community poll: ${poll.question}`);
+    notify("Community poll created");
+  };
 
   const resolveSosAlert = (id) => {
     if (typeof setSosAlerts !== "function") return;
@@ -1987,7 +2196,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 
         {section === "dashboard" && (
           <div className="mt-7">
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
               {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Security Alerts", totalSecurityAlerts], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
                 <Card key={title} className="p-4"><p className="text-xs text-slate-500">{title}</p><p className="text-2xl font-black text-slate-950 mt-2">{value}</p></Card>
               ))}
@@ -2248,7 +2457,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
               </h3>
               <p className="text-sm text-slate-500 mt-1">Live recommendations based on current demo data.</p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mt-5 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-4 mt-5 items-start">
                 <div className="rounded-3xl bg-red-50 border border-red-100 p-4 min-h-[150px]">
                   <div className="flex items-center gap-2"><ShieldAlert className="text-red-600" /><b className="text-red-900">Security Insight</b></div>
                   <p className="text-sm text-slate-600 mt-2">
@@ -2300,6 +2509,15 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
                     SOS Alerts: {totalSosCount}<br />
                     Active SOS: {activeSosCount}<br />
                     Resolved SOS: {resolvedSosCount}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-cyan-50 border border-cyan-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><Megaphone className="text-cyan-600" /><b className="text-cyan-900">Community Hub</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Notices: {noticeCount}<br />
+                    Active Polls: {activePollCount}<br />
+                    Total Votes: {totalPollVotes}
                   </p>
                 </div>
               </div>
@@ -2368,6 +2586,91 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
           </div>
         )}
 
+        {section === "notices" && (
+          <div className="space-y-5">
+            <SectionTitle title="Notice Board" sub="Publish and manage society announcements" />
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950 flex items-center gap-2">
+                <Megaphone className="text-cyan-600" /> Publish New Notice
+              </h3>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-4">
+                <input className="rounded-2xl border border-slate-200 p-3 text-sm" value={newNotice.title} onChange={(e) => setNewNotice((p) => ({ ...p, title: e.target.value }))} />
+                <input className="rounded-2xl border border-slate-200 p-3 text-sm" value={newNotice.category} onChange={(e) => setNewNotice((p) => ({ ...p, category: e.target.value }))} />
+                <Button onClick={createAdminNotice} variant="success">
+                  <Send size={16} /> Publish Notice
+                </Button>
+              </div>
+              <textarea className="mt-3 w-full rounded-2xl border border-slate-200 p-3 text-sm h-24" value={newNotice.body} onChange={(e) => setNewNotice((p) => ({ ...p, body: e.target.value }))} />
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950">Live Notices</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                {notices.map((n) => (
+                  <div key={n.id} className="rounded-3xl bg-cyan-50 border border-cyan-100 p-4">
+                    <p className="font-black text-cyan-950">{n.title}</p>
+                    <p className="text-sm text-slate-600 mt-1">{n.body}</p>
+                    <p className="text-xs text-slate-400 mt-2">{n.category} • {n.createdBy} • {n.createdAt}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {section === "polls" && (
+          <div className="space-y-5">
+            <SectionTitle title="Community Polls" sub="Create polls and track resident voting" />
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950 flex items-center gap-2">
+                <BarChart3 className="text-emerald-600" /> Create New Poll
+              </h3>
+              <input className="mt-4 w-full rounded-2xl border border-slate-200 p-3 text-sm" value={newPoll.question} onChange={(e) => setNewPoll((p) => ({ ...p, question: e.target.value }))} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                <input className="rounded-2xl border border-slate-200 p-3 text-sm" value={newPoll.option1} onChange={(e) => setNewPoll((p) => ({ ...p, option1: e.target.value }))} />
+                <input className="rounded-2xl border border-slate-200 p-3 text-sm" value={newPoll.option2} onChange={(e) => setNewPoll((p) => ({ ...p, option2: e.target.value }))} />
+                <input className="rounded-2xl border border-slate-200 p-3 text-sm" value={newPoll.option3} onChange={(e) => setNewPoll((p) => ({ ...p, option3: e.target.value }))} />
+              </div>
+              <Button onClick={createAdminPoll} className="mt-3">
+                <BarChart3 size={16} /> Create Poll
+              </Button>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950">Poll Results</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                {communityPolls.map((poll) => {
+                  const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0) || 1;
+                  return (
+                    <div key={poll.id} className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4">
+                      <p className="font-black text-emerald-950">{poll.question}</p>
+                      <p className="text-xs text-slate-500 mt-1">{poll.status} • {poll.createdAt}</p>
+                      <div className="mt-3 space-y-2">
+                        {poll.options.map((opt) => {
+                          const percent = Math.round((opt.votes / totalVotes) * 100);
+                          return (
+                            <div key={opt.label} className="rounded-2xl bg-white border border-emerald-100 p-3">
+                              <div className="flex justify-between text-sm">
+                                <b>{opt.label}</b>
+                                <span>{opt.votes} vote(s) • {percent}%</span>
+                              </div>
+                              <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                <div className="h-full bg-emerald-500" style={{ width: `${percent}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
+
         {section === "settings" && (
           <div className="mt-7">
             <SectionTitle title="Settings" sub="Society, gates, roles and permissions" />
@@ -2390,6 +2693,26 @@ export default function SocioGateClickableDemo() {
   const [knownVehicles, setKnownVehicles] = useState({});
   const [preApprovedVisitors, setPreApprovedVisitors] = useState({});
   const [sosAlerts, setSosAlerts] = useState([]);
+  const [notices, setNotices] = useState([
+    { id: 1, title: "Water Tank Cleaning", body: "Water tank cleaning tomorrow from 10 AM to 1 PM.", category: "Maintenance", createdBy: "Admin", createdAt: "Today" },
+    { id: 2, title: "AGM Meeting", body: "AGM meeting on Sunday, 6 PM at clubhouse.", category: "Meeting", createdBy: "Admin", createdAt: "Today" },
+    { id: 3, title: "Parking Stickers", body: "New parking stickers are available from admin office.", category: "Parking", createdBy: "Admin", createdAt: "Today" },
+  ]);
+  const [communityPolls, setCommunityPolls] = useState([
+    {
+      id: 1,
+      question: "Should society install EV charging points?",
+      options: [
+        { label: "Yes", votes: 18 },
+        { label: "No", votes: 5 },
+        { label: "Need Discussion", votes: 7 },
+      ],
+      votedOption: "",
+      status: "active",
+      createdBy: "Admin",
+      createdAt: "Today",
+    },
+  ]);
   const [billPaid, setBillPaid] = useState(false);
   const [logs, setLogs] = useState([]);
   const [toast, setToast] = useState("");
@@ -2423,6 +2746,26 @@ export default function SocioGateClickableDemo() {
     setKnownVehicles({});
     setPreApprovedVisitors({});
     setSosAlerts([]);
+    setNotices([
+      { id: 1, title: "Water Tank Cleaning", body: "Water tank cleaning tomorrow from 10 AM to 1 PM.", category: "Maintenance", createdBy: "Admin", createdAt: "Today" },
+      { id: 2, title: "AGM Meeting", body: "AGM meeting on Sunday, 6 PM at clubhouse.", category: "Meeting", createdBy: "Admin", createdAt: "Today" },
+      { id: 3, title: "Parking Stickers", body: "New parking stickers are available from admin office.", category: "Parking", createdBy: "Admin", createdAt: "Today" },
+    ]);
+    setCommunityPolls([
+      {
+        id: 1,
+        question: "Should society install EV charging points?",
+        options: [
+          { label: "Yes", votes: 18 },
+          { label: "No", votes: 5 },
+          { label: "Need Discussion", votes: 7 },
+        ],
+        votedOption: "",
+        status: "active",
+        createdBy: "Admin",
+        createdAt: "Today",
+      },
+    ]);
     setBillPaid(false);
     setLogs([]);
     setResetKey((k) => k + 1);
@@ -2457,9 +2800,9 @@ export default function SocioGateClickableDemo() {
           <Button onClick={resetDemo} variant="danger">Reset Demo</Button>
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
-          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
+          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
           {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
-          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} logs={logs} addLog={addLog} notify={notify} billPaid={billPaid} /></div>}
+          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} setNotices={setNotices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} logs={logs} addLog={addLog} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
     </div>
