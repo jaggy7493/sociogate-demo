@@ -253,10 +253,17 @@ function Toast({ toast, clear }) {
   );
 }
 
-function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, addLog, notify, billPaid, setBillPaid }) {
+function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, addLog, notify, billPaid, setBillPaid }) {
   const [screen, setScreen] = useState("splash");
   const [showPopup, setShowPopup] = useState(false);
   const [complaintRaised, setComplaintRaised] = useState(false);
+  const [preApprovalForm, setPreApprovalForm] = useState({
+    name: "Amit Sharma",
+    mobile: "9876501234",
+    purpose: "Guest Visit",
+    arrival: "5:30 PM",
+  });
+  const [lastPreApproval, setLastPreApproval] = useState(null);
   const latest = activeVisitor || visitorHistory[0];
 
   useEffect(() => {
@@ -312,6 +319,35 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
       return;
     }
     window.location.href = `tel:${latest.mobile}`;
+  };
+
+  const createPreApproval = () => {
+    const mobileKey = normalizeMobile(preApprovalForm.mobile);
+    if (mobileKey.length !== 10) {
+      notify("Enter valid 10 digit mobile number");
+      return;
+    }
+    const pass = {
+      id: Date.now(),
+      passId: `PA-${Date.now().toString().slice(-5)}`,
+      name: preApprovalForm.name || "Guest Visitor",
+      mobile: mobileKey,
+      flat: "A-1204",
+      purpose: preApprovalForm.purpose || "Guest Visit",
+      gate: "Main Gate",
+      arrival: preApprovalForm.arrival || "Today",
+      approvedBy: "Jagmeet Singh",
+      approvedAt: "Pre-approved",
+      status: "pre-approved",
+      trusted: true,
+      createdAt: "Today",
+    };
+    if (typeof setPreApprovedVisitors === "function") {
+      setPreApprovedVisitors((prev) => ({ ...prev, [mobileKey]: pass }));
+    }
+    setLastPreApproval(pass);
+    addLog(`Resident pre-approved ${pass.name} (${mobileKey}) for ${pass.flat}`);
+    notify("Visitor pre-approved");
   };
 
   const DashboardCard = ({ Icon, title, sub, onClick, urgent }) => (
@@ -450,6 +486,68 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     );
   }
 
+  if (screen === "preapprove") {
+    return (
+      <PhoneShell>
+        <div className="h-full p-5 overflow-y-auto sg-scroll">
+          <HeaderBack title="Pre-Approve Visitor" subtitle="Create instant gate approval" onBack={() => setScreen("dashboard")} />
+          <Card className="p-4 bg-blue-50 border-blue-100">
+            <p className="font-black text-blue-900">Resident Convenience</p>
+            <p className="text-sm text-slate-600 mt-1">Pre-approved visitors can be verified at the gate without waiting for a new approval call.</p>
+          </Card>
+
+          <div className="space-y-3 mt-4">
+            <div>
+              <label className="text-xs text-slate-500">Visitor Name</label>
+              <input className="mt-1 w-full rounded-2xl border border-slate-200 p-4 outline-none text-slate-900" value={preApprovalForm.name} onChange={(e) => setPreApprovalForm((p) => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Mobile Number</label>
+              <input className="mt-1 w-full rounded-2xl border border-slate-200 p-4 outline-none text-slate-900" value={preApprovalForm.mobile} onChange={(e) => setPreApprovalForm((p) => ({ ...p, mobile: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Purpose</label>
+              <input className="mt-1 w-full rounded-2xl border border-slate-200 p-4 outline-none text-slate-900" value={preApprovalForm.purpose} onChange={(e) => setPreApprovalForm((p) => ({ ...p, purpose: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Expected Arrival</label>
+              <input className="mt-1 w-full rounded-2xl border border-slate-200 p-4 outline-none text-slate-900" value={preApprovalForm.arrival} onChange={(e) => setPreApprovalForm((p) => ({ ...p, arrival: e.target.value }))} />
+            </div>
+            <Button onClick={createPreApproval} className="w-full" variant="success">
+              <BadgeCheck size={18} /> Generate Pre-Approval Pass
+            </Button>
+          </div>
+
+          {lastPreApproval && (
+            <Card className="p-5 mt-5 bg-gradient-to-r from-emerald-50 to-cyan-50 border-emerald-200">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="text-emerald-600 shrink-0" size={30} />
+                <div>
+                  <p className="font-black text-emerald-900">Visitor Pre-Approved</p>
+                  <p className="text-sm text-slate-700 mt-1">{lastPreApproval.name} • {lastPreApproval.flat}</p>
+                  <p className="text-xs text-slate-500 mt-1">{lastPreApproval.purpose} • Arrival: {lastPreApproval.arrival}</p>
+                  <p className="mt-3 rounded-2xl bg-white border border-emerald-100 px-4 py-3 text-center font-black text-slate-950">{lastPreApproval.passId}</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-4 mt-5">
+            <h3 className="font-black text-slate-950">Today’s Pre-Approvals</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {Object.values(preApprovedVisitors).length ? Object.values(preApprovedVisitors).slice(0, 4).map((p) => (
+                <div key={p.id} className="rounded-2xl bg-slate-50 p-3">
+                  <b>{p.name}</b> • {p.mobile}<br />
+                  <span className="text-xs">{p.purpose} • {p.arrival}</span>
+                </div>
+              )) : <p>No pre-approved visitors yet.</p>}
+            </div>
+          </Card>
+        </div>
+      </PhoneShell>
+    );
+  }
+
   if (screen === "notices") {
     return (
       <PhoneShell>
@@ -497,9 +595,11 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
 
           <div className="grid grid-cols-2 gap-3 mt-5">
             <DashboardCard Icon={UserCheck} title="Visitors" sub={activeVisitor ? activeVisitor.status : "All clear"} urgent={activeVisitor?.status === "pending"} onClick={() => activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} />
+            <DashboardCard Icon={BadgeCheck} title="Pre-Approve" sub={`${Object.keys(preApprovedVisitors).length} active`} onClick={() => setScreen("preapprove")} />
             <DashboardCard Icon={Wallet} title="Bills" sub={billPaid ? "All paid" : "₹4,500 due"} onClick={() => setScreen("bills")} />
             <DashboardCard Icon={MessageSquareWarning} title="Complaints" sub={complaintRaised ? "2 active" : "1 active"} onClick={() => setScreen("complaints")} />
             <DashboardCard Icon={Megaphone} title="Notices" sub="3 new" onClick={() => setScreen("notices")} />
+            <DashboardCard Icon={Siren} title="SOS" sub="Emergency ready" onClick={() => setScreen("sos")} />
           </div>
 
           <Card className="mt-5 p-4 shadow-md border-slate-200">
@@ -604,7 +704,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   );
 }
 
-function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, knownVehicles = {}, setKnownVehicles, resetSerial, addLog, notify }) {
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, knownVehicles = {}, setKnownVehicles, preApprovedVisitors = {}, resetSerial, addLog, notify }) {
   const [screen, setScreen] = useState("login");
   const [visitorForm, setVisitorForm] = useState({
     name: "Ramesh Kumar",
@@ -641,6 +741,12 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     normalizedVisitorMobile.length === 10 &&
     knownVisitors?.[normalizedVisitorMobile]?.completedProfile === true
       ? knownVisitors[normalizedVisitorMobile]
+      : undefined;
+
+  const preApprovedProfile =
+    normalizedVisitorMobile.length === 10 &&
+    preApprovedVisitors?.[normalizedVisitorMobile]
+      ? preApprovedVisitors[normalizedVisitorMobile]
       : undefined;
 
   const isCurrentDraftVisitor =
@@ -774,9 +880,13 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         ? "Suspicious Visitor"
         : isRejectedRetry
         ? "Previously Rejected Visitor"
+        : preApprovedProfile
+        ? "Trusted Pre-Approved Visitor"
         : "First Time Visitor",
-      riskScore: securityRisk.blacklisted ? securityRisk.riskScore : isMultipleFlatAttempt ? 75 : isRejectedRetry ? 65 : 30,
-      riskLabel: securityRisk.blacklisted ? securityRisk.riskLabel : isMultipleFlatAttempt ? "High Risk" : isRejectedRetry ? "Medium Risk" : "Medium Risk",
+      riskScore: securityRisk.blacklisted ? securityRisk.riskScore : isMultipleFlatAttempt ? 75 : isRejectedRetry ? 65 : preApprovedProfile ? 5 : 30,
+      riskLabel: securityRisk.blacklisted ? securityRisk.riskLabel : isMultipleFlatAttempt ? "High Risk" : isRejectedRetry ? "Medium Risk" : preApprovedProfile ? "Very Low Risk" : "Medium Risk",
+      preApproved: !!preApprovedProfile,
+      preApprovalPassId: preApprovedProfile?.passId || "",
       blacklisted: securityRisk.blacklisted,
       suspicious: isMultipleFlatAttempt || isRejectedRetry,
       suspiciousType: isMultipleFlatAttempt ? "Multiple Flat Attempts" : isRejectedRetry ? "Rejected Visitor Retry" : "",
@@ -960,6 +1070,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
     const profile = knownProfile;
     const requestSecurityRisk = getSecurityRisk(visitorForm.mobile);
     const requestBlacklisted = requestSecurityRisk.blacklisted;
+    const requestPreApprovedProfile = preApprovedVisitors?.[normalizeMobile(visitorForm.mobile)];
     const requestAttemptProfile = visitorAttempts?.[normalizeMobile(visitorForm.mobile)] || { flats: [], rejectedFlats: [] };
     const requestAttemptedFlats = requestAttemptProfile.flats || [];
     const requestRejectedFlats = requestAttemptProfile.rejectedFlats || [];
@@ -996,13 +1107,17 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         ? "Suspicious Visitor"
         : requestRejectedRetry
         ? "Previously Rejected Visitor"
+        : requestPreApprovedProfile
+        ? "Trusted Pre-Approved Visitor"
         : profile
         ? "Known Visitor"
         : hasCapturedFace
         ? (draftSource?.faceType || "First Time Visitor")
         : "Not Scanned",
-      riskScore: requestBlacklisted ? 95 : requestMultipleFlatAttempt ? 75 : requestRejectedRetry ? 65 : profile ? (profile.riskScore || 10) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
-      riskLabel: requestBlacklisted ? "High Risk" : requestMultipleFlatAttempt ? "High Risk" : requestRejectedRetry ? "Medium Risk" : profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
+      riskScore: requestBlacklisted ? 95 : requestMultipleFlatAttempt ? 75 : requestRejectedRetry ? 65 : requestPreApprovedProfile ? 5 : profile ? (profile.riskScore || 10) : hasCapturedFace ? (draftSource?.riskScore || 30) : 30,
+      riskLabel: requestBlacklisted ? "High Risk" : requestMultipleFlatAttempt ? "High Risk" : requestRejectedRetry ? "Medium Risk" : requestPreApprovedProfile ? "Very Low Risk" : profile ? (profile.riskLabel || "Low Risk") : hasCapturedFace ? (draftSource?.riskLabel || "Medium Risk") : "Medium Risk",
+      preApproved: !!requestPreApprovedProfile && !requestBlacklisted,
+      preApprovalPassId: requestPreApprovedProfile?.passId || "",
       blacklisted: requestBlacklisted,
       suspicious: requestMultipleFlatAttempt || requestRejectedRetry,
       suspiciousType: requestMultipleFlatAttempt ? "Multiple Flat Attempts" : requestRejectedRetry ? "Rejected Visitor Retry" : "",
@@ -1021,10 +1136,10 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         ? "Security verification recommended"
         : requestSecurityRisk.securityRecommendation,
       repeatVisitor: !!profile,
-      status: "pending",
+      status: requestPreApprovedProfile && !requestBlacklisted ? "approved" : "pending",
       requestTime: "11:45 AM",
-      approvedBy: "--",
-      approvedAt: "--",
+      approvedBy: requestPreApprovedProfile && !requestBlacklisted ? requestPreApprovedProfile.approvedBy : "--",
+      approvedAt: requestPreApprovedProfile && !requestBlacklisted ? "Pre-approved" : "--",
       entryTime: "--",
       exitTime: "--",
       passId: `SG-${Date.now().toString().slice(-5)}`,
@@ -1052,11 +1167,13 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
         ? `🚨 Blacklisted visitor approval request: ${visitor.name} (${visitor.mobile}) • Risk Score 95%`
         : visitor.suspicious
         ? `⚠ Suspicious visitor approval request: ${visitor.name} (${visitor.mobile}) • ${visitor.suspiciousType}`
+        : requestPreApprovedProfile
+        ? `Pre-approved visitor verified at gate: ${visitor.name} (${visitor.mobile}) • ${visitor.preApprovalPassId}`
         : profile
         ? `Known visitor approval request: ${visitor.name} (${visitor.flat})`
         : `Guard sent visitor approval request for ${visitor.name} (${visitor.flat})`
     );
-    notify(profile ? "Known visitor request sent" : "Approval request sent");
+    notify(requestPreApprovedProfile && !requestBlacklisted ? "Pre-approved visitor verified" : profile ? "Known visitor request sent" : "Approval request sent");
     setScreen("waiting");
   };
 
@@ -1236,6 +1353,35 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
                 <Button onClick={applyKnownVisitorProfile} variant="success" className="py-2 px-3 text-xs">
                   Auto Fetch
                 </Button>
+              </div>
+            </Card>
+          )}
+
+          {preApprovedProfile && !isBlacklistedVisitor && (
+            <Card className="p-4 bg-gradient-to-r from-emerald-950 via-slate-950 to-cyan-950 border-emerald-400/30 text-white shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <BadgeCheck className="text-emerald-300" size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-emerald-300">PRE-APPROVED VISITOR</p>
+                  <p className="text-sm text-white mt-1">{preApprovedProfile.name} • {preApprovedProfile.flat}</p>
+                  <p className="text-xs text-cyan-200 mt-1">Resident approval already granted • Risk Score: 5%</p>
+                  <p className="text-xs text-slate-300 mt-1">Pass: {preApprovedProfile.passId} • Arrival: {preApprovedProfile.arrival}</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {preApprovedProfile && isBlacklistedVisitor && (
+            <Card className="p-4 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/40 text-white shadow-xl shadow-red-950/30">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="text-red-300 animate-pulse shrink-0" size={28} />
+                <div>
+                  <p className="font-black text-red-300">PRE-APPROVAL OVERRIDDEN</p>
+                  <p className="text-sm text-white mt-1">Visitor is pre-approved but security watchlist has higher priority.</p>
+                  <p className="text-xs text-red-200 mt-1">Final Risk Score: 95% • Reject recommended</p>
+                </div>
               </div>
             </Card>
           )}
@@ -1483,6 +1629,13 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
                 </div>
               </div>
               <p className="text-xs text-slate-400 mt-3">AI Result: {activeVisitor.faceVerified ? (activeVisitor.faceType || "Known Visitor") : "Not Scanned"} • {activeVisitor.faceVerified ? (activeVisitor.riskLabel || "Low Risk") : (activeVisitor.riskLabel || "Medium Risk")}</p>
+              {activeVisitor.preApproved && !activeVisitor.blacklisted && !activeVisitor.suspicious && (
+                <div className="mt-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-3">
+                  <p className="text-sm font-black text-emerald-300">Pre-Approved Visitor</p>
+                  <p className="text-xs text-emerald-200 mt-1">Resident approval already granted • Pass ID: {activeVisitor.preApprovalPassId}</p>
+                </div>
+              )}
+
               {(activeVisitor.blacklisted || activeVisitor.suspicious) && (
                 <div className={`mt-4 rounded-2xl p-3 ${activeVisitor.blacklisted ? "bg-red-500/10 border border-red-500/30" : "bg-amber-500/10 border border-amber-500/30"}`}>
                   <p className={`text-sm font-black ${activeVisitor.blacklisted ? "text-red-300" : "text-amber-300"}`}>{activeVisitor.blacklisted ? "Blacklisted Visitor Alert" : "Suspicious Activity Alert"}</p>
@@ -1663,7 +1816,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, logs, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, logs, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
@@ -1699,6 +1852,8 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
       : "No critical suspicious activity right now.";
   const knownVehicleCount = Object.keys(knownVehicles || {}).length;
   const activeVehicleCount = allSecurityVehicles.filter((v) => v.status === "in").length;
+  const preApprovedCount = Object.keys(preApprovedVisitors || {}).length;
+  const trustedVisitorCount = allSecurityVisitors.filter((v) => v.preApproved).length;
 
   const visitorsToday = 42 + visitorHistory.length;
   const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
@@ -2028,7 +2183,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
               </h3>
               <p className="text-sm text-slate-500 mt-1">Live recommendations based on current demo data.</p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mt-5 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mt-5 items-start">
                 <div className="rounded-3xl bg-red-50 border border-red-100 p-4 min-h-[150px]">
                   <div className="flex items-center gap-2"><ShieldAlert className="text-red-600" /><b className="text-red-900">Security Insight</b></div>
                   <p className="text-sm text-slate-600 mt-2">
@@ -2071,6 +2226,15 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
                     Suspicious Faces: {activeVisitor?.status === "wrong entry" ? 2 : 1}
                   </p>
                 </div>
+
+                <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4 min-h-[150px]">
+                  <div className="flex items-center gap-2"><BadgeCheck className="text-emerald-600" /><b className="text-emerald-900">Resident Experience</b></div>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Pre-Approved: {preApprovedCount}<br />
+                    Trusted Entries: {trustedVisitorCount}<br />
+                    SOS Alerts: 0
+                  </p>
+                </div>
               </div>
             </Card>
 
@@ -2085,7 +2249,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
                 {[
-                  ["How many visitors today?", `${visitorsToday} visitors logged today.`],
+                  ["How many visitors today?", `${visitorsToday} visitors logged today. ${preApprovedCount} visitor(s) are pre-approved.`],
                   ["Any suspicious activity?", suspiciousAiAnswer],
                   ["Which flats have dues?", `${overdueFlats} flats are overdue. A-1204 is ${billPaid ? "paid" : "pending"}.`],
                   ["What should admin do next?", "Review security logs, send billing reminders, and schedule lift maintenance."]
@@ -2137,6 +2301,7 @@ export default function SocioGateClickableDemo() {
   const [knownVisitors, setKnownVisitors] = useState({});
   const [visitorAttempts, setVisitorAttempts] = useState({});
   const [knownVehicles, setKnownVehicles] = useState({});
+  const [preApprovedVisitors, setPreApprovedVisitors] = useState({});
   const [billPaid, setBillPaid] = useState(false);
   const [logs, setLogs] = useState([]);
   const [toast, setToast] = useState("");
@@ -2168,6 +2333,7 @@ export default function SocioGateClickableDemo() {
     setKnownVisitors({});
     setVisitorAttempts({});
     setKnownVehicles({});
+    setPreApprovedVisitors({});
     setBillPaid(false);
     setLogs([]);
     setResetKey((k) => k + 1);
@@ -2202,9 +2368,9 @@ export default function SocioGateClickableDemo() {
           <Button onClick={resetDemo} variant="danger">Reset Demo</Button>
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
-          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
-          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
-          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} logs={logs} notify={notify} billPaid={billPaid} /></div>}
+          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
+          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} preApprovedVisitors={preApprovedVisitors} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
+          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} logs={logs} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
     </div>
