@@ -253,7 +253,7 @@ function Toast({ toast, clear }) {
   );
 }
 
-function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, addLog, notify, billPaid, setBillPaid }) {
+function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, sosAlerts = [], setSosAlerts, addLog, notify, billPaid, setBillPaid }) {
   const [screen, setScreen] = useState("splash");
   const [showPopup, setShowPopup] = useState(false);
   const [complaintRaised, setComplaintRaised] = useState(false);
@@ -265,6 +265,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   });
   const [lastPreApproval, setLastPreApproval] = useState(null);
   const latest = activeVisitor || visitorHistory[0];
+  const activeSosAlert = sosAlerts.find((s) => s.status === "active");
 
   useEffect(() => {
     if (screen === "dashboard" && activeVisitor?.status === "pending") setShowPopup(true);
@@ -319,6 +320,34 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
       return;
     }
     window.location.href = `tel:${latest.mobile}`;
+  };
+
+  const triggerSosAlert = () => {
+    if (activeSosAlert) {
+      notify("SOS already active");
+      return;
+    }
+    const alert = {
+      id: Date.now(),
+      flat: "A-1204",
+      resident: "Jagmeet Singh",
+      status: "active",
+      priority: "Critical",
+      triggeredAt: "Now",
+      message: "Resident triggered emergency SOS from mobile app",
+      resolvedAt: "--",
+    };
+    if (typeof setSosAlerts === "function") setSosAlerts((prev) => [alert, ...prev]);
+    addLog(`🚨 SOS alert triggered by ${alert.resident} from ${alert.flat}`);
+    notify("SOS alert sent to guard and admin");
+    setScreen("dashboard");
+  };
+
+  const resolveResidentSos = () => {
+    if (!activeSosAlert || typeof setSosAlerts !== "function") return;
+    setSosAlerts((prev) => prev.map((s) => s.id === activeSosAlert.id ? { ...s, status: "resolved", resolvedAt: "Now" } : s));
+    addLog(`SOS alert resolved for ${activeSosAlert.flat}`);
+    notify("SOS alert resolved");
   };
 
   const createPreApproval = () => {
@@ -567,11 +596,22 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     return (
       <PhoneShell>
         <div className="h-full p-5 flex flex-col justify-center text-center">
-          <Siren className="mx-auto text-red-500" size={88} />
+          <Siren className={`mx-auto ${activeSosAlert ? "text-red-600 animate-pulse" : "text-red-500"}`} size={88} />
           <h2 className="text-3xl font-black mt-5">Emergency SOS</h2>
-          <p className="text-slate-500 mt-2">This will alert guard, admin, and emergency contacts.</p>
-          <Button onClick={() => { addLog("SOS alert triggered by A-1204"); notify("SOS alert sent to security"); setScreen("dashboard"); }} variant="danger" className="w-full mt-8">Send SOS Alert</Button>
-          <Button onClick={() => setScreen("dashboard")} variant="ghost" className="w-full mt-3">Cancel</Button>
+          <p className="text-slate-500 mt-2">{activeSosAlert ? "Active SOS already sent to guard and admin." : "This will alert guard, admin, and emergency contacts."}</p>
+          {activeSosAlert && (
+            <Card className="mt-6 p-4 bg-red-50 border-red-200 text-left">
+              <p className="font-black text-red-700">Active Emergency</p>
+              <p className="text-sm text-slate-700 mt-1">{activeSosAlert.message}</p>
+              <p className="text-xs text-slate-500 mt-1">{activeSosAlert.flat} • {activeSosAlert.triggeredAt}</p>
+            </Card>
+          )}
+          {!activeSosAlert ? (
+            <Button onClick={triggerSosAlert} variant="danger" className="w-full mt-8"><Siren size={18} /> Send SOS Alert</Button>
+          ) : (
+            <Button onClick={resolveResidentSos} variant="success" className="w-full mt-8"><CheckCircle2 size={18} /> Mark SOS Resolved</Button>
+          )}
+          <Button onClick={() => setScreen("dashboard")} variant="ghost" className="w-full mt-3">Back</Button>
         </div>
       </PhoneShell>
     );
@@ -599,7 +639,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
             <DashboardCard Icon={Wallet} title="Bills" sub={billPaid ? "All paid" : "₹4,500 due"} onClick={() => setScreen("bills")} />
             <DashboardCard Icon={MessageSquareWarning} title="Complaints" sub={complaintRaised ? "2 active" : "1 active"} onClick={() => setScreen("complaints")} />
             <DashboardCard Icon={Megaphone} title="Notices" sub="3 new" onClick={() => setScreen("notices")} />
-            <DashboardCard Icon={Siren} title="SOS" sub="Emergency ready" onClick={() => setScreen("sos")} />
+            <DashboardCard Icon={Siren} title="SOS" sub={activeSosAlert ? "Active emergency" : "Emergency ready"} urgent={!!activeSosAlert} onClick={() => setScreen("sos")} />
           </div>
 
           <Card className="mt-5 p-4 shadow-md border-slate-200">
@@ -704,7 +744,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   );
 }
 
-function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, knownVehicles = {}, setKnownVehicles, preApprovedVisitors = {}, resetSerial, addLog, notify }) {
+function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle, setActiveVehicle, saveVehicle, knownVisitors = {}, setKnownVisitors, visitorAttempts = {}, setVisitorAttempts, knownVehicles = {}, setKnownVehicles, preApprovedVisitors = {}, sosAlerts = [], resetSerial, addLog, notify }) {
   const [screen, setScreen] = useState("login");
   const [visitorForm, setVisitorForm] = useState({
     name: "Ramesh Kumar",
@@ -723,6 +763,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [cameraFacing, setCameraFacing] = useState("environment");
+  const activeGuardSosAlert = sosAlerts.find((s) => s.status === "active");
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
@@ -1801,6 +1842,19 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
             </button>
           ))}
         </div>
+        {activeGuardSosAlert && (
+          <Card className="p-4 mt-5 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/40 text-white shadow-xl shadow-red-950/30">
+            <div className="flex items-start gap-3">
+              <Siren className="text-red-300 animate-pulse shrink-0" size={30} />
+              <div>
+                <p className="font-black text-red-300">EMERGENCY SOS ACTIVE</p>
+                <p className="text-sm text-white mt-1">{activeGuardSosAlert.flat} • {activeGuardSosAlert.resident}</p>
+                <p className="text-xs text-red-200 mt-1">{activeGuardSosAlert.message}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 gap-3 mt-6">
           <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Visitor Status</p><p className="text-xl font-black mt-1">{activeVisitor?.status || "none"}</p></Card>
           <Card className="p-4 bg-slate-900 border-slate-800 text-white"><p className="text-slate-400 text-sm">Vehicle</p><p className="text-xl font-black mt-1">{activeVehicle?.watchlisted ? "watchlist" : activeVehicle?.knownVehicle ? "known" : activeVehicle?.status || "none"}</p></Card>
@@ -1816,7 +1870,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, logs, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, sosAlerts = [], setSosAlerts, logs, addLog, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
@@ -1854,6 +1908,10 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
   const activeVehicleCount = allSecurityVehicles.filter((v) => v.status === "in").length;
   const preApprovedCount = Object.keys(preApprovedVisitors || {}).length;
   const trustedVisitorCount = allSecurityVisitors.filter((v) => v.preApproved).length;
+  const activeSosCount = sosAlerts.filter((s) => s.status === "active").length;
+  const resolvedSosCount = sosAlerts.filter((s) => s.status === "resolved").length;
+  const totalSosCount = sosAlerts.length;
+  const latestSosAlert = sosAlerts.find((s) => s.status === "active") || sosAlerts[0];
 
   const visitorsToday = 42 + visitorHistory.length;
   const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
@@ -1865,6 +1923,13 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
   const filteredResidents = residents
     .map((r) => r.flat === "A-1204" ? { ...r, due: billPaid ? "₹0" : "₹4,500" } : r)
     .filter((r) => `${r.flat} ${r.name} ${r.type} ${r.due} ${r.status}`.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const resolveSosAlert = (id) => {
+    if (typeof setSosAlerts !== "function") return;
+    setSosAlerts((prev) => prev.map((s) => s.id === id ? { ...s, status: "resolved", resolvedAt: "Now" } : s));
+    addLog("Admin resolved SOS alert");
+    notify("SOS alert resolved");
+  };
 
   const updateVisitor = (updated) => {
     setActiveVisitor(updated);
@@ -2232,11 +2297,33 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
                   <p className="text-sm text-slate-600 mt-2">
                     Pre-Approved: {preApprovedCount}<br />
                     Trusted Entries: {trustedVisitorCount}<br />
-                    SOS Alerts: 0
+                    SOS Alerts: {totalSosCount}<br />
+                    Active SOS: {activeSosCount}<br />
+                    Resolved SOS: {resolvedSosCount}
                   </p>
                 </div>
               </div>
             </Card>
+
+            {latestSosAlert && (
+              <Card className={`p-5 ${activeSosCount > 0 ? "bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-red-500/40 text-white shadow-xl shadow-red-950/30" : "bg-slate-50 border-slate-200"}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <Siren className={activeSosCount > 0 ? "text-red-300 animate-pulse shrink-0" : "text-slate-500 shrink-0"} size={32} />
+                    <div>
+                      <h3 className={`font-black ${activeSosCount > 0 ? "text-white" : "text-slate-950"}`}>Emergency SOS Monitor</h3>
+                      <p className={`text-sm mt-1 ${activeSosCount > 0 ? "text-red-200" : "text-slate-600"}`}>{latestSosAlert.flat} • {latestSosAlert.resident} • {latestSosAlert.status}</p>
+                      <p className={`text-xs mt-1 ${activeSosCount > 0 ? "text-red-100" : "text-slate-500"}`}>{latestSosAlert.message}</p>
+                    </div>
+                  </div>
+                  {latestSosAlert.status === "active" && <Button onClick={() => resolveSosAlert(latestSosAlert.id)} variant="success" className="py-2 px-3 text-xs">Resolve</Button>}
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+                  <div className="rounded-2xl bg-white/10 p-3"><p className={activeSosCount > 0 ? "text-red-200" : "text-slate-600"}>Active SOS</p><b>{activeSosCount}</b></div>
+                  <div className="rounded-2xl bg-white/10 p-3"><p className={activeSosCount > 0 ? "text-red-200" : "text-slate-600"}>Resolved SOS</p><b>{resolvedSosCount}</b></div>
+                </div>
+              </Card>
+            )}
 
             <Card className="p-5 bg-slate-950 text-white border-slate-800 shadow-xl">
               <h3 className="font-black text-2xl flex items-center gap-2"><Bot className="text-cyan-300" /> Ask SocioGate AI</h3>
@@ -2250,7 +2337,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
                 {[
                   ["How many visitors today?", `${visitorsToday} visitors logged today. ${preApprovedCount} visitor(s) are pre-approved.`],
-                  ["Any suspicious activity?", suspiciousAiAnswer],
+                  ["Any suspicious activity?", activeSosCount > 0 ? `Critical: ${activeSosCount} active SOS alert(s). Immediate guard response required.` : suspiciousAiAnswer],
                   ["Which flats have dues?", `${overdueFlats} flats are overdue. A-1204 is ${billPaid ? "paid" : "pending"}.`],
                   ["What should admin do next?", "Review security logs, send billing reminders, and schedule lift maintenance."]
                 ].map(([q, a]) => (
@@ -2302,6 +2389,7 @@ export default function SocioGateClickableDemo() {
   const [visitorAttempts, setVisitorAttempts] = useState({});
   const [knownVehicles, setKnownVehicles] = useState({});
   const [preApprovedVisitors, setPreApprovedVisitors] = useState({});
+  const [sosAlerts, setSosAlerts] = useState([]);
   const [billPaid, setBillPaid] = useState(false);
   const [logs, setLogs] = useState([]);
   const [toast, setToast] = useState("");
@@ -2334,6 +2422,7 @@ export default function SocioGateClickableDemo() {
     setVisitorAttempts({});
     setKnownVehicles({});
     setPreApprovedVisitors({});
+    setSosAlerts([]);
     setBillPaid(false);
     setLogs([]);
     setResetKey((k) => k + 1);
@@ -2368,9 +2457,9 @@ export default function SocioGateClickableDemo() {
           <Button onClick={resetDemo} variant="danger">Reset Demo</Button>
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
-          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
-          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} preApprovedVisitors={preApprovedVisitors} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
-          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} logs={logs} notify={notify} billPaid={billPaid} /></div>}
+          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
+          {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
+          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} logs={logs} addLog={addLog} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
     </div>
