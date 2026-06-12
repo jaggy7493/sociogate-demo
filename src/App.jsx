@@ -253,7 +253,7 @@ function Toast({ toast, clear }) {
   );
 }
 
-function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, sosAlerts = [], setSosAlerts, notices = [], communityPolls = [], setCommunityPolls, addLog, notify, billPaid, setBillPaid }) {
+function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisitor, preApprovedVisitors = {}, setPreApprovedVisitors, sosAlerts = [], setSosAlerts, notices = [], communityPolls = [], setCommunityPolls, billingLedger = [], setBillingLedger, addLog, notify, billPaid, setBillPaid }) {
   const [screen, setScreen] = useState("splash");
   const [showPopup, setShowPopup] = useState(false);
   const [complaintRaised, setComplaintRaised] = useState(false);
@@ -266,12 +266,23 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   const [lastPreApproval, setLastPreApproval] = useState(null);
   const [seenNoticeIds, setSeenNoticeIds] = useState([]);
   const [dismissedPollIds, setDismissedPollIds] = useState([]);
+  const [paymentMethod, setPaymentMethod] = useState("UPI");
+  const [lastPaymentReceipt, setLastPaymentReceipt] = useState(null);
   const latest = activeVisitor || visitorHistory[0];
   const activeSosAlert = sosAlerts.find((s) => s.status === "active");
   const latestUnreadNotice = notices.find((n) => !seenNoticeIds.includes(n.id));
   const latestPendingPoll = communityPolls.find((p) => !p.votedOption && !dismissedPollIds.includes(p.id));
   const unreadNoticeCount = notices.filter((n) => !seenNoticeIds.includes(n.id)).length;
   const pendingPollCount = communityPolls.filter((p) => !p.votedOption).length;
+  const residentCurrentBill = billingLedger.find((b) => b.flat === "A-1204") || {
+    flat: "A-1204",
+    name: "Jagmeet Singh",
+    month: "June 2026",
+    amount: 4500,
+    dueDate: "10 June 2026",
+    status: billPaid ? "paid" : "pending",
+  };
+  const residentBillHistory = billingLedger.filter((b) => b.flat === "A-1204");
 
   useEffect(() => {
     if (screen === "dashboard" && activeVisitor?.status === "pending") setShowPopup(true);
@@ -385,6 +396,36 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
     notify("Visitor pre-approved");
   };
 
+  const payMaintenanceBill = () => {
+    if (!residentCurrentBill || residentCurrentBill.status === "paid") {
+      notify("No pending bill to pay");
+      return;
+    }
+
+    const txId = `TXN-${residentCurrentBill.flat.replace("-", "")}-${Date.now().toString().slice(-5)}`;
+    const receiptId = `RCPT-${residentCurrentBill.flat.replace("-", "")}-${Date.now().toString().slice(-5)}`;
+
+    const updatedBill = {
+      ...residentCurrentBill,
+      status: "paid",
+      paidAt: "Now",
+      txId,
+      method: paymentMethod,
+      receiptId,
+    };
+
+    if (typeof setBillingLedger === "function") {
+      setBillingLedger((prev) =>
+        prev.map((b) => (b.flat === residentCurrentBill.flat ? updatedBill : b))
+      );
+    }
+
+    setBillPaid(true);
+    setLastPaymentReceipt(updatedBill);
+    addLog(`Maintenance payment received from ${updatedBill.flat}: ₹${updatedBill.amount} via ${paymentMethod}`);
+    notify("Payment successful. Receipt generated.");
+  };
+
   const voteCommunityPoll = (pollId, optionLabel) => {
     if (typeof setCommunityPolls !== "function") return;
     setCommunityPolls((prev) =>
@@ -490,33 +531,80 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
   }
 
   if (screen === "bills") {
+    const isPaid = residentCurrentBill.status === "paid";
     return (
       <PhoneShell>
         <div className="h-full p-5 overflow-y-auto sg-scroll">
-          <HeaderBack title="Maintenance Bills" subtitle="Billing ERP connected" onBack={() => setScreen("dashboard")} />
-          <div className="rounded-3xl bg-gradient-to-r from-blue-700 to-cyan-500 p-5 text-white">
-            <p className="text-blue-100">Total Due</p>
-            <h1 className="text-4xl font-black mt-1">{billPaid ? "₹0" : "₹4,500"}</h1>
-            <p className="text-sm text-blue-100 mt-1">Due date: 10 June 2026</p>
+          <HeaderBack title="Maintenance Bills" subtitle="Smart billing and payments" onBack={() => setScreen("dashboard")} />
+
+          <div className={`rounded-3xl p-5 text-white ${isPaid ? "bg-gradient-to-r from-emerald-600 to-cyan-500" : "bg-gradient-to-r from-blue-700 to-cyan-500"}`}>
+            <p className="text-blue-100">Current Due</p>
+            <h1 className="text-4xl font-black mt-1">₹{isPaid ? "0" : residentCurrentBill.amount.toLocaleString("en-IN")}</h1>
+            <p className="text-sm text-blue-100 mt-1">{residentCurrentBill.month} • Due: {residentCurrentBill.dueDate}</p>
+            <span className={`inline-block mt-3 text-xs rounded-full px-3 py-1 font-bold ${isPaid ? "bg-white/20 text-white" : "bg-amber-300 text-slate-950"}`}>
+              {isPaid ? "PAID" : residentCurrentBill.status.toUpperCase()}
+            </span>
           </div>
+
           <Card className="p-4 mt-4 space-y-3">
-            <div className="flex justify-between"><span>Maintenance</span><b>₹3,000</b></div>
-            <div className="flex justify-between"><span>Parking</span><b>₹800</b></div>
-            <div className="flex justify-between"><span>Water</span><b>₹400</b></div>
-            <div className="flex justify-between"><span>Sinking Fund</span><b>₹300</b></div>
+            <div className="flex justify-between"><span>Flat</span><b>{residentCurrentBill.flat}</b></div>
+            <div className="flex justify-between"><span>Resident</span><b>{residentCurrentBill.name}</b></div>
+            <div className="flex justify-between"><span>Maintenance</span><b>₹{residentCurrentBill.amount.toLocaleString("en-IN")}</b></div>
+            <div className="flex justify-between"><span>Late Fee</span><b>{residentCurrentBill.status === "overdue" ? "₹250" : "₹0"}</b></div>
           </Card>
-          <Button
-            disabled={billPaid}
-            onClick={() => {
-              setBillPaid(true);
-              addLog("Resident paid maintenance bill ₹4,500 from A-1204");
-              notify("Payment successful. ERP billing updated.");
-            }}
-            className="w-full mt-4"
-            variant="success"
-          >
-            <CreditCard size={18} /> {billPaid ? "Paid Successfully" : "Pay Now"}
-          </Button>
+
+          {!isPaid && (
+            <Card className="p-4 mt-4">
+              <p className="font-black text-slate-950">Select Payment Method</p>
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {["UPI", "Card", "Net Banking"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setPaymentMethod(m)}
+                    className={`rounded-2xl border p-3 text-xs font-bold ${paymentMethod === m ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200"}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <Button onClick={payMaintenanceBill} className="w-full mt-4" variant="success">
+                <CreditCard size={18} /> Pay ₹{residentCurrentBill.amount.toLocaleString("en-IN")}
+              </Button>
+            </Card>
+          )}
+
+          {(isPaid || lastPaymentReceipt) && (
+            <Card className="p-4 mt-4 bg-emerald-50 border-emerald-100">
+              <div className="flex gap-3">
+                <CheckCircle2 className="text-emerald-600 shrink-0" size={28} />
+                <div>
+                  <p className="font-black text-emerald-900">Payment Receipt</p>
+                  <p className="text-sm text-slate-700 mt-1">Receipt: {(lastPaymentReceipt || residentCurrentBill).receiptId || "RCPT-A1204-0626"}</p>
+                  <p className="text-xs text-slate-500 mt-1">TXN: {(lastPaymentReceipt || residentCurrentBill).txId || "TXN-A1204-0626"} • {(lastPaymentReceipt || residentCurrentBill).method || "UPI"}</p>
+                  <Button onClick={() => notify("Receipt download simulated")} variant="ghost" className="mt-3 py-2 text-xs">
+                    <Download size={14} /> Download Receipt
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-4 mt-4">
+            <h3 className="font-black text-slate-950">Bill History</h3>
+            <div className="mt-3 space-y-2">
+              {residentBillHistory.map((b) => (
+                <div key={`${b.flat}-${b.month}`} className="rounded-2xl bg-slate-50 p-3 flex justify-between items-center text-sm">
+                  <div>
+                    <b>{b.month}</b>
+                    <p className="text-xs text-slate-500">₹{b.amount.toLocaleString("en-IN")} • {b.dueDate}</p>
+                  </div>
+                  <span className={`text-xs rounded-full px-3 py-1 font-bold ${b.status === "paid" ? "bg-emerald-100 text-emerald-700" : b.status === "overdue" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                    {b.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       </PhoneShell>
     );
@@ -774,7 +862,7 @@ function ResidentApp({ activeVisitor, visitorHistory, setActiveVisitor, saveVisi
           <div className="grid grid-cols-2 gap-3 mt-5">
             <DashboardCard Icon={UserCheck} title="Visitors" sub={activeVisitor ? activeVisitor.status : "All clear"} urgent={activeVisitor?.status === "pending"} onClick={() => activeVisitor?.status === "pending" ? setShowPopup(true) : notify("No pending visitor approval")} />
             <DashboardCard Icon={BadgeCheck} title="Pre-Approve" sub={`${Object.keys(preApprovedVisitors).length} active`} onClick={() => setScreen("preapprove")} />
-            <DashboardCard Icon={Wallet} title="Bills" sub={billPaid ? "All paid" : "₹4,500 due"} onClick={() => setScreen("bills")} />
+            <DashboardCard Icon={Wallet} title="Bills" sub={residentCurrentBill.status === "paid" ? "All paid" : `₹${residentCurrentBill.amount.toLocaleString("en-IN")} due`} urgent={residentCurrentBill.status !== "paid"} onClick={() => setScreen("bills")} />
             <DashboardCard Icon={MessageSquareWarning} title="Complaints" sub={complaintRaised ? "2 active" : "1 active"} onClick={() => setScreen("complaints")} />
             <DashboardCard Icon={Megaphone} title="Notices" sub={`${unreadNoticeCount} unread`} urgent={unreadNoticeCount > 0} onClick={() => setScreen("notices")} />
             <DashboardCard Icon={BarChart3} title="Polls" sub={`${pendingPollCount} pending`} urgent={pendingPollCount > 0} onClick={() => setScreen("polls")} />
@@ -2041,7 +2129,7 @@ function GuardApp({ activeVisitor, setActiveVisitor, saveVisitor, activeVehicle,
   );
 }
 
-function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, sosAlerts = [], setSosAlerts, notices = [], setNotices, communityPolls = [], setCommunityPolls, logs, addLog, notify, billPaid }) {
+function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVisitorHistory, activeVehicle, setActiveVehicle, vehicleHistory, setVehicleHistory, visitorAttempts = {}, knownVehicles = {}, preApprovedVisitors = {}, sosAlerts = [], setSosAlerts, notices = [], setNotices, communityPolls = [], setCommunityPolls, billingLedger = [], setBillingLedger, logs, addLog, notify, billPaid }) {
   const [section, setSection] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [showResidentForm, setShowResidentForm] = useState(false);
@@ -2088,11 +2176,35 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
   const noticeCount = notices.length;
   const activePollCount = communityPolls.filter((p) => p.status === "active").length;
   const totalPollVotes = communityPolls.reduce((sum, poll) => sum + poll.options.reduce((s, o) => s + o.votes, 0), 0);
-
+  const totalBilledAmount = billingLedger.reduce((sum, b) => sum + b.amount, 0);
+  const collectedBillingAmount = billingLedger.filter((b) => b.status === "paid").reduce((sum, b) => sum + b.amount, 0);
+  const pendingBillingAmount = totalBilledAmount - collectedBillingAmount;
+  const paidFlatCount = billingLedger.filter((b) => b.status === "paid").length;
+  const pendingFlatCount = billingLedger.filter((b) => b.status !== "paid").length;
+  const collectionRate = totalBilledAmount ? Math.round((collectedBillingAmount / totalBilledAmount) * 100) : 0;
   const visitorsToday = 42 + visitorHistory.length;
-  const collectedAmount = billPaid ? "₹8.74L" : "₹8.70L";
-  const pendingAmount = billPaid ? "₹3.65L" : "₹3.70L";
-  const overdueFlats = billPaid ? "37" : "38";
+  const collectionTrendData = [
+    { month: "Jan", billed: 16500, collected: 13200 },
+    { month: "Feb", billed: 17200, collected: 14800 },
+    { month: "Mar", billed: 18100, collected: 15900 },
+    { month: "Apr", billed: 18800, collected: 17100 },
+    { month: "May", billed: 19300, collected: 16500 },
+    { month: "Jun", billed: totalBilledAmount, collected: collectedBillingAmount },
+  ];
+  const maxTrendAmount = Math.max(...collectionTrendData.map((m) => m.billed || 1));
+  const visitorTrendData = [
+    { day: "Mon", visitors: 24 },
+    { day: "Tue", visitors: 31 },
+    { day: "Wed", visitors: 28 },
+    { day: "Thu", visitors: visitorsToday },
+    { day: "Fri", visitors: 36 },
+    { day: "Sat", visitors: 51 },
+    { day: "Sun", visitors: 33 },
+  ];
+  const maxVisitorTrend = Math.max(...visitorTrendData.map((d) => d.visitors || 1));
+  const collectedAmount = `₹${collectedBillingAmount.toLocaleString("en-IN")}`;
+  const pendingAmount = `₹${pendingBillingAmount.toLocaleString("en-IN")}`;
+  const overdueFlats = String(pendingFlatCount);
   const menu = [["dashboard", LayoutDashboard, "Dashboard"], ["residents", Building2, "Residents"], ["visitors", Users, "Visitors"], ["billing", ReceiptText, "Billing"], ["complaints", ClipboardList, "Complaints"], ["reports", BarChart3, "Reports"], ["notices", Megaphone, "Notices"], ["polls", BarChart3, "Polls"], ["ai", Bot, "AI Copilot"], ["settings", Settings, "Settings"]];
   const SectionTitle = ({ title, sub }) => <div className="mb-5"><h2 className="text-2xl font-black text-slate-950">{title}</h2><p className="text-sm text-slate-500">{sub}</p></div>;
 
@@ -2196,9 +2308,20 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 
         {section === "dashboard" && (
           <div className="mt-7">
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
-              {[["Total Flats", "248"], ["Active Residents", "612"], ["Visitors Today", visitorsToday], ["Security Alerts", totalSecurityAlerts], ["Monthly Collection", collectedAmount], ["Staff On Duty", "6"]].map(([title, value]) => (
-                <Card key={title} className="p-4"><p className="text-xs text-slate-500">{title}</p><p className="text-2xl font-black text-slate-950 mt-2">{value}</p></Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[
+                ["Total Flats", "248", "Registered units", "bg-blue-50", "text-blue-700"],
+                ["Active Residents", "612", "+12 this month", "bg-emerald-50", "text-emerald-700"],
+                ["Visitors Today", visitorsToday, "Live gate entries", "bg-cyan-50", "text-cyan-700"],
+                ["Security Alerts", totalSecurityAlerts, totalSecurityAlerts ? "Needs review" : "All clear", "bg-red-50", "text-red-700"],
+                ["Monthly Collection", `₹${collectedBillingAmount.toLocaleString("en-IN")}`, `${collectionRate}% collected`, "bg-amber-50", "text-amber-700"],
+                ["Staff On Duty", "6", "Main gate active", "bg-purple-50", "text-purple-700"],
+              ].map(([title, value, sub, bg, text]) => (
+                <Card key={title} className={`p-5 ${bg} border-slate-100 min-h-[118px]`}>
+                  <p className={`text-sm font-bold ${text}`}>{title}</p>
+                  <h3 className="text-3xl font-black mt-2 text-slate-950">{value}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{sub}</p>
+                </Card>
               ))}
             </div>
             {totalSecurityAlerts > 0 && (
@@ -2222,16 +2345,69 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
             )}
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
-              <Card className="p-5 xl:col-span-2 h-64">
-                <div className="flex justify-between"><h3 className="font-black text-slate-950">Visitor Trend</h3><span className="text-xs text-emerald-600 font-bold">Live</span></div>
-                <div className="h-44 mt-5 flex items-end gap-3">
-                  {[45, 70, 52, 88, 62, 95, activeVisitor ? 78 : 66].map((h, i) => <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${h}%` }} className="flex-1 rounded-t-xl bg-gradient-to-t from-blue-600 to-cyan-300" />)}
+              <Card className="p-5 xl:col-span-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-slate-950">Visitor Trend</h3>
+                    <p className="text-sm text-slate-500 mt-1">Weekly gate entries across all visitor categories</p>
+                  </div>
+                  <span className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 font-bold">Live</span>
+                </div>
+
+                <div className="mt-5 h-72 rounded-3xl bg-gradient-to-r from-slate-50 to-blue-50 p-5">
+                  <div className="h-56 flex items-end gap-4 border-b border-slate-200 pb-1">
+                    {visitorTrendData.map((d) => {
+                      const heightPx = Math.max(42, Math.round((d.visitors / maxVisitorTrend) * 170));
+                      return (
+                        <div key={d.day} className="flex-1 flex flex-col items-center justify-end">
+                          <div className="text-xs font-black text-slate-700 mb-2">{d.visitors}</div>
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: heightPx }}
+                            transition={{ duration: 0.45 }}
+                            className="w-full max-w-[42px] rounded-t-2xl bg-gradient-to-t from-blue-700 to-cyan-300 shadow-lg shadow-blue-100"
+                          />
+                          <div className="mt-2 text-xs font-bold text-slate-500">{d.day}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </Card>
-              <Card className="p-5 h-64">
-                <h3 className="font-black text-slate-950">Billing Collection</h3>
-                <div className="mt-7 h-32 w-32 mx-auto rounded-full border-[18px] border-blue-600 flex items-center justify-center"><span className="font-black text-xl">70%</span></div>
-                <p className="text-center text-sm text-slate-500 mt-4">{collectedAmount} collected of ₹12.4L</p>
+
+              <Card className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-slate-950">Billing Collection</h3>
+                    <p className="text-sm text-slate-500 mt-1">Current month recovery</p>
+                  </div>
+                  <IndianRupee className="text-emerald-600" />
+                </div>
+
+                <div className="mt-6 flex flex-col items-center">
+                  <div className="relative h-40 w-40 rounded-full bg-slate-100 flex items-center justify-center">
+                    <div
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: `conic-gradient(#2563eb ${collectionRate * 3.6}deg, #e2e8f0 0deg)` }}
+                    />
+                    <div className="relative h-28 w-28 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                      <b className="text-3xl text-slate-950">{collectionRate}%</b>
+                      <span className="text-[11px] text-slate-500">Collected</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 w-full mt-6 text-sm">
+                    <div className="rounded-2xl bg-emerald-50 p-3">
+                      <p className="text-emerald-700 text-xs">Collected</p>
+                      <b className="text-emerald-900">₹{collectedBillingAmount.toLocaleString("en-IN")}</b>
+                    </div>
+                    <div className="rounded-2xl bg-amber-50 p-3">
+                      <p className="text-amber-700 text-xs">Pending</p>
+                      <b className="text-amber-900">₹{pendingBillingAmount.toLocaleString("en-IN")}</b>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-4">Total billed: ₹{totalBilledAmount.toLocaleString("en-IN")}</p>
+                </div>
               </Card>
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
@@ -2375,13 +2551,87 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
           </div>
         )}
 
-        {section === "billing" && (
-          <div className="mt-7">
-            <SectionTitle title="Billing ERP" sub="Generate bills, reminders and payment reports" />
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[["Total Demand", "₹12.4L"], ["Collected", collectedAmount], ["Pending", pendingAmount], ["Overdue Flats", overdueFlats]].map(([a, b]) => <Card key={a} className="p-4"><p className="text-xs text-slate-500">{a}</p><p className="text-2xl font-black mt-2">{b}</p></Card>)}
+                {section === "billing" && (
+          <div className="space-y-5">
+            <SectionTitle title="Smart Billing & Payments" sub="Flat-wise maintenance collection and payment tracking" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-5"><p className="text-slate-500">Total Billed</p><h3 className="text-2xl font-black mt-1">₹{totalBilledAmount.toLocaleString("en-IN")}</h3></Card>
+              <Card className="p-5"><p className="text-slate-500">Collected</p><h3 className="text-2xl font-black mt-1 text-emerald-600">₹{collectedBillingAmount.toLocaleString("en-IN")}</h3></Card>
+              <Card className="p-5"><p className="text-slate-500">Pending</p><h3 className="text-2xl font-black mt-1 text-amber-600">₹{pendingBillingAmount.toLocaleString("en-IN")}</h3></Card>
+              <Card className="p-5"><p className="text-slate-500">Collection Rate</p><h3 className="text-2xl font-black mt-1 text-blue-600">{collectionRate}%</h3></Card>
             </div>
-            <div className="flex flex-wrap gap-3 mt-4"><Button onClick={() => notify("Monthly bills generated")}>Generate Bills</Button><Button onClick={() => notify("Reminders sent")} variant="ghost">Send Reminder</Button><Button onClick={() => notify("Billing Excel exported")} variant="ghost">Export Excel</Button></div>
+
+            <Card className="p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-slate-950">Collection Trend</h3>
+                  <p className="text-sm text-slate-500 mt-1">Month-wise billed vs collected amount</p>
+                </div>
+                <span className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 font-bold">Live</span>
+              </div>
+
+              <div className="mt-5 rounded-3xl bg-gradient-to-r from-blue-50 to-cyan-50 p-5">
+                <div className="h-56 flex items-end gap-4">
+                  {collectionTrendData.map((m) => {
+                    const collectedHeightPx = Math.max(24, Math.round((m.collected / maxTrendAmount) * 150));
+                    const billedHeightPx = Math.max(28, Math.round((m.billed / maxTrendAmount) * 150));
+                    const rate = m.billed ? Math.round((m.collected / m.billed) * 100) : 0;
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center justify-end">
+                        <div className="text-[11px] font-bold text-slate-700 mb-2">₹{(m.collected / 1000).toFixed(1)}K</div>
+                        <div className="relative w-full h-40 flex items-end justify-center">
+                          <div className="absolute bottom-0 w-full max-w-[34px] rounded-t-2xl bg-slate-200" style={{ height: billedHeightPx }} />
+                          <div className="absolute bottom-0 w-full max-w-[34px] rounded-t-2xl bg-blue-600 shadow-lg shadow-blue-200" style={{ height: collectedHeightPx }} />
+                        </div>
+                        <div className="mt-2 text-xs font-black text-slate-950">{m.month}</div>
+                        <div className="text-[10px] text-slate-500">{rate}%</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-5 flex items-center gap-4 text-xs text-slate-600">
+                  <div className="flex items-center gap-2"><span className="h-3 w-3 rounded bg-blue-600" /> Collected</div>
+                  <div className="flex items-center gap-2"><span className="h-3 w-3 rounded bg-slate-200" /> Billed</div>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950">Flat-wise Billing Ledger</h3>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b">
+                      <th className="py-3">Flat</th>
+                      <th>Resident</th>
+                      <th>Amount</th>
+                      <th>Due Date</th>
+                      <th>Status</th>
+                      <th>Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billingLedger.map((b) => (
+                      <tr key={`${b.flat}-${b.month}`} className="border-b last:border-0">
+                        <td className="py-3 font-bold">{b.flat}</td>
+                        <td>{b.name}</td>
+                        <td>₹{b.amount.toLocaleString("en-IN")}</td>
+                        <td>{b.dueDate}</td>
+                        <td>
+                          <span className={`text-xs rounded-full px-3 py-1 font-bold ${b.status === "paid" ? "bg-emerald-100 text-emerald-700" : b.status === "overdue" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                            {b.status}
+                          </span>
+                        </td>
+                        <td>{b.receiptId || "--"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            
           </div>
         )}
 
@@ -2453,6 +2703,26 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 
             <Card className="p-5">
               <h3 className="font-black text-slate-950 flex items-center gap-2">
+                <IndianRupee className="text-emerald-600" /> Billing Snapshot
+              </h3>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4">
+                  <p className="text-sm text-emerald-700">Collected</p>
+                  <h3 className="text-2xl font-black text-emerald-900 mt-1">₹{collectedBillingAmount.toLocaleString("en-IN")}</h3>
+                </div>
+                <div className="rounded-3xl bg-amber-50 border border-amber-100 p-4">
+                  <p className="text-sm text-amber-700">Pending</p>
+                  <h3 className="text-2xl font-black text-amber-900 mt-1">₹{pendingBillingAmount.toLocaleString("en-IN")}</h3>
+                </div>
+                <div className="rounded-3xl bg-blue-50 border border-blue-100 p-4">
+                  <p className="text-sm text-blue-700">Collection Rate</p>
+                  <h3 className="text-2xl font-black text-blue-900 mt-1">{collectionRate}%</h3>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-black text-slate-950 flex items-center gap-2">
                 <Bot className="text-blue-600" /> AI Command Center
               </h3>
               <p className="text-sm text-slate-500 mt-1">Live recommendations based on current demo data.</p>
@@ -2472,7 +2742,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
                 <div className="rounded-3xl bg-blue-50 border border-blue-100 p-4 min-h-[150px]">
                   <div className="flex items-center gap-2"><IndianRupee className="text-blue-600" /><b className="text-blue-900">Billing Recovery</b></div>
                   <p className="text-sm text-slate-600 mt-2">
-                    Expected collection this month: ₹11.2L of ₹12.4L. Recovery probability: 90%.
+                    Collected: ₹{collectedBillingAmount.toLocaleString("en-IN")} of ₹{totalBilledAmount.toLocaleString("en-IN")}. Collection rate: {collectionRate}%.
                   </p>
                 </div>
 
@@ -2698,6 +2968,13 @@ export default function SocioGateClickableDemo() {
     { id: 2, title: "AGM Meeting", body: "AGM meeting on Sunday, 6 PM at clubhouse.", category: "Meeting", createdBy: "Admin", createdAt: "Today" },
     { id: 3, title: "Parking Stickers", body: "New parking stickers are available from admin office.", category: "Parking", createdBy: "Admin", createdAt: "Today" },
   ]);
+  const [billingLedger, setBillingLedger] = useState([
+    { flat: "A-1204", name: "Jagmeet Singh", month: "June 2026", amount: 4500, dueDate: "10 June 2026", status: "pending", paidAt: "", txId: "", method: "", receiptId: "" },
+    { flat: "B-804", name: "Priya Sharma", month: "June 2026", amount: 3200, dueDate: "10 June 2026", status: "paid", paidAt: "02 June 2026", txId: "TXN-B804-0626", method: "UPI", receiptId: "RCPT-B804-0626" },
+    { flat: "C-502", name: "Rohit Verma", month: "June 2026", amount: 2800, dueDate: "10 June 2026", status: "paid", paidAt: "01 June 2026", txId: "TXN-C502-0626", method: "Card", receiptId: "RCPT-C502-0626" },
+    { flat: "D-1101", name: "Neha Gupta", month: "June 2026", amount: 5200, dueDate: "10 June 2026", status: "pending", paidAt: "", txId: "", method: "", receiptId: "" },
+    { flat: "E-303", name: "Amit Malhotra", month: "June 2026", amount: 3600, dueDate: "10 June 2026", status: "overdue", paidAt: "", txId: "", method: "", receiptId: "" },
+  ]);
   const [communityPolls, setCommunityPolls] = useState([
     {
       id: 1,
@@ -2751,6 +3028,13 @@ export default function SocioGateClickableDemo() {
       { id: 2, title: "AGM Meeting", body: "AGM meeting on Sunday, 6 PM at clubhouse.", category: "Meeting", createdBy: "Admin", createdAt: "Today" },
       { id: 3, title: "Parking Stickers", body: "New parking stickers are available from admin office.", category: "Parking", createdBy: "Admin", createdAt: "Today" },
     ]);
+    setBillingLedger([
+      { flat: "A-1204", name: "Jagmeet Singh", month: "June 2026", amount: 4500, dueDate: "10 June 2026", status: "pending", paidAt: "", txId: "", method: "", receiptId: "" },
+      { flat: "B-804", name: "Priya Sharma", month: "June 2026", amount: 3200, dueDate: "10 June 2026", status: "paid", paidAt: "02 June 2026", txId: "TXN-B804-0626", method: "UPI", receiptId: "RCPT-B804-0626" },
+      { flat: "C-502", name: "Rohit Verma", month: "June 2026", amount: 2800, dueDate: "10 June 2026", status: "paid", paidAt: "01 June 2026", txId: "TXN-C502-0626", method: "Card", receiptId: "RCPT-C502-0626" },
+      { flat: "D-1101", name: "Neha Gupta", month: "June 2026", amount: 5200, dueDate: "10 June 2026", status: "pending", paidAt: "", txId: "", method: "", receiptId: "" },
+      { flat: "E-303", name: "Amit Malhotra", month: "June 2026", amount: 3600, dueDate: "10 June 2026", status: "overdue", paidAt: "", txId: "", method: "", receiptId: "" },
+    ]);
     setCommunityPolls([
       {
         id: 1,
@@ -2800,9 +3084,9 @@ export default function SocioGateClickableDemo() {
           <Button onClick={resetDemo} variant="danger">Reset Demo</Button>
         </Card>
         <div className={`mt-8 gap-6 lg:gap-8 items-start ${mode === "overview" ? "grid grid-cols-1 md:grid-cols-2" : "flex flex-wrap justify-center"}`}>
-          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
+          {(mode === "overview" || mode === "resident") && <div className="mx-auto"><ResidentApp key={`resident-${resetKey}`} activeVisitor={activeVisitor} visitorHistory={visitorHistory} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} preApprovedVisitors={preApprovedVisitors} setPreApprovedVisitors={setPreApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} billingLedger={billingLedger} setBillingLedger={setBillingLedger} addLog={addLog} notify={notify} billPaid={billPaid} setBillPaid={setBillPaid} /></div>}
           {(mode === "overview" || mode === "guard") && <div className="mx-auto"><GuardApp key={`guard-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} saveVisitor={saveVisitor} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} saveVehicle={saveVehicle} knownVisitors={knownVisitors} setKnownVisitors={setKnownVisitors} visitorAttempts={visitorAttempts} setVisitorAttempts={setVisitorAttempts} knownVehicles={knownVehicles} setKnownVehicles={setKnownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} resetSerial={resetSerial} addLog={addLog} notify={notify} /></div>}
-          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} setNotices={setNotices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} logs={logs} addLog={addLog} notify={notify} billPaid={billPaid} /></div>}
+          {(mode === "overview" || mode === "erp") && <div className={mode === "overview" ? "md:col-span-2 w-full" : "w-full flex justify-center"}><AdminDashboard key={`erp-${resetKey}`} activeVisitor={activeVisitor} setActiveVisitor={setActiveVisitor} visitorHistory={visitorHistory} setVisitorHistory={setVisitorHistory} activeVehicle={activeVehicle} setActiveVehicle={setActiveVehicle} vehicleHistory={vehicleHistory} setVehicleHistory={setVehicleHistory} visitorAttempts={visitorAttempts} knownVehicles={knownVehicles} preApprovedVisitors={preApprovedVisitors} sosAlerts={sosAlerts} setSosAlerts={setSosAlerts} notices={notices} setNotices={setNotices} communityPolls={communityPolls} setCommunityPolls={setCommunityPolls} billingLedger={billingLedger} setBillingLedger={setBillingLedger} logs={logs} addLog={addLog} notify={notify} billPaid={billPaid} /></div>}
         </div>
       </div>
     </div>
