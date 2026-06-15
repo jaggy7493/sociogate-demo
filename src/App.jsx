@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
+import ExperienceCenter from "./experience/ExperienceCenter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, Bell, UserCheck, Wallet, MessageSquareWarning, Megaphone, Siren, Home,
@@ -2953,6 +2954,8 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 }
 
 export default function SocioGateClickableDemo() {
+  const [showExperienceCenter, setShowExperienceCenter] = useState(true);
+
   const [mode, setMode] = useState("overview");
   const [activeVisitor, setActiveVisitor] = useState(null);
   const [visitorHistory, setVisitorHistory] = useState([]);
@@ -3056,6 +3059,16 @@ export default function SocioGateClickableDemo() {
     setResetSerial((s) => s + 1);
     notify("Demo fully reset");
   };
+
+  if (showExperienceCenter) {
+    return (
+      <ExperienceCenter
+        onEnterProduct={() => setShowExperienceCenter(false)}
+        onLiveDemo={() => setShowExperienceCenter(false)}
+      />
+    );
+  }
+
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32%),linear-gradient(135deg,#f8fafc,#eef6ff)] p-3 sm:p-5 lg:p-6 text-slate-900 overflow-x-hidden">
