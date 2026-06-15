@@ -1,6 +1,11 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Bell } from "lucide-react";
+import CameraFlash from "./CameraFlash";
+import SecurityAlarm from "./SecurityAlarm";
+import GateBarrier from "./GateBarrier";
+import MovingVehicle from "./MovingVehicle";
+import ResidentNotification from "./ResidentNotification";
 import { phoneMotion } from "../styles/animations";
 
 export default function AnimatedPhone({ scene }) {
@@ -8,6 +13,8 @@ export default function AnimatedPhone({ scene }) {
 
   return (
     <div className="relative">
+      <CameraFlash active={scene.id === "ai-scan"} />
+      <SecurityAlarm active={scene.danger} label={scene.id === "vehicle" ? "WATCHLIST VEHICLE" : scene.id === "sos" ? "SOS ACTIVE" : "SECURITY ALERT"} />
       {/* Glow only. No label here, because the old spotlight label was covering the phone header on every slide. */}
       <div className="pointer-events-none absolute -inset-4 z-0">
         <motion.div
@@ -33,7 +40,7 @@ export default function AnimatedPhone({ scene }) {
             </div>
           </div>
 
-          <div className={`bg-gradient-to-br ${scene.tone} p-5 pt-5 text-white`}>
+          <div className={`relative overflow-hidden bg-gradient-to-br ${scene.tone} p-5 pt-5 text-white`}>
             {/* Header card is now fully below notch. */}
             <div className="rounded-2xl bg-black/28 p-3 backdrop-blur-md border border-white/10">
               <div className="flex items-center justify-between gap-3">
@@ -69,6 +76,12 @@ export default function AnimatedPhone({ scene }) {
                 </p>
               </motion.div>
             </div>
+            {scene.id === "resident-approval" && <ResidentNotification active approved={false} />}
+            {scene.id === "access-granted" && <ResidentNotification active approved />}
+            {scene.id === "access-granted" && <GateBarrier mode="open" />}
+            {scene.id === "blacklist" && <GateBarrier mode="blocked" />}
+            {scene.id === "vehicle" && <MovingVehicle danger />}
+            {scene.id === "sos" && <div className="absolute bottom-5 left-5 right-5 z-20 rounded-3xl border border-red-300/30 bg-red-950/75 p-4 text-center text-sm font-black text-red-100 shadow-2xl shadow-red-950/40">Emergency response dispatched to A-1204</div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3 p-4">
