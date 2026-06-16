@@ -5,12 +5,22 @@ import FloatingBackground from "./components/FloatingBackground";
 import MenuCard from "./components/MenuCard";
 import Pill from "./components/Pill";
 import ExperiencePlayer from "./ExperiencePlayer";
+import SalesToolkit from "../sales/SalesToolkit";
 
 export default function ExperienceCenter({ onEnterProduct, onLiveDemo }) {
   const [screen, setScreen] = useState("home");
 
   if (screen === "player") {
     return <ExperiencePlayer onExit={onEnterProduct} />;
+  }
+
+  if (screen === "sales") {
+    return (
+      <SalesToolkit
+        onBack={() => setScreen("home")}
+        onLaunchProduct={onEnterProduct}
+      />
+    );
   }
 
   return (
@@ -58,7 +68,7 @@ export default function ExperienceCenter({ onEnterProduct, onLiveDemo }) {
             <MenuCard Icon={Camera} title="Live Camera Demo" subtitle="Launch the live platform and test the real camera flow." onClick={onLiveDemo || onEnterProduct} tone="from-emerald-600 to-cyan-500" />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <MenuCard Icon={Compass} title="Feature Explorer" subtitle="Browse SocioGate modules." onClick={() => setScreen("player")} tone="from-violet-600 to-fuchsia-500" />
-              <MenuCard Icon={IndianRupee} title="Pricing" subtitle="Show plans and billing value." onClick={onEnterProduct} tone="from-amber-500 to-orange-500" />
+              <MenuCard Icon={IndianRupee} title="Pricing & ROI" subtitle="Show plans, savings and recommended package." onClick={() => setScreen("sales")} tone="from-amber-500 to-orange-500" />
             </div>
             <MenuCard Icon={PhoneCall} title="Book Live Demo" subtitle="Use this in your sales pitch." onClick={onEnterProduct} tone="from-slate-800 to-slate-600" />
           </motion.div>
