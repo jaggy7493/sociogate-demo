@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import ExperienceCenter from "./experience/ExperienceCenter";
+import WebsiteHome from "./website/pages/Home";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, Bell, UserCheck, Wallet, MessageSquareWarning, Megaphone, Siren, Home,
@@ -2954,7 +2955,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 }
 
 export default function SocioGateClickableDemo() {
-  const [showExperienceCenter, setShowExperienceCenter] = useState(true);
+  const [currentScreen, setCurrentScreen] = useState("website");
 
   const [mode, setMode] = useState("overview");
   const [activeVisitor, setActiveVisitor] = useState(null);
@@ -3060,11 +3061,22 @@ export default function SocioGateClickableDemo() {
     notify("Demo fully reset");
   };
 
-  if (showExperienceCenter) {
+  if (currentScreen === "website") {
+    return (
+      <WebsiteHome
+        onLaunchDemo={() => setCurrentScreen("experience")}
+        onBookDemo={() => {
+          window.location.href = "mailto:hello@sociogate.in?subject=Book%20SocioGate%20Demo";
+        }}
+      />
+    );
+  }
+
+  if (currentScreen === "experience") {
     return (
       <ExperienceCenter
-        onEnterProduct={() => setShowExperienceCenter(false)}
-        onLiveDemo={() => setShowExperienceCenter(false)}
+        onEnterProduct={() => setCurrentScreen("live")}
+        onLiveDemo={() => setCurrentScreen("live")}
       />
     );
   }
