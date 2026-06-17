@@ -222,7 +222,7 @@ export default function PricingExperience({ onBookDemo, onLaunchDemo }) {
   };
 
   return (
-    <section id="pricing" className="relative scroll-mt-32 px-5 py-24">
+    <section id="pricing" className="relative scroll-mt-36 px-5 py-24">
       <div className="mx-auto max-w-7xl">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">Premium Pricing Experience</p>

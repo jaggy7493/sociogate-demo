@@ -3,7 +3,7 @@ import AuroraBackground from "../components/AuroraBackground";
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
 import Stats from "../components/Stats";
-import ProductCards from "../components/ProductCards";
+import ProductShowcase from "../components/ProductShowcase";
 import PricingExperience from "../components/PricingExperience";
 import Footer from "../components/Footer";
 
@@ -18,8 +18,8 @@ export default function WebsiteHome({ onLaunchDemo, onBookDemo }) {
       <main className="relative">
         <Hero onLaunchDemo={launchDemo} onBookDemo={bookDemo} />
         <Stats />
-        <ProductCards />
-        <section id="ai" className="relative scroll-mt-32 px-5 py-20">
+        <ProductShowcase onLaunchDemo={launchDemo} onBookDemo={bookDemo} />
+        <section id="ai" className="relative scroll-mt-36 px-5 py-20">
           <div className="mx-auto max-w-7xl rounded-[2.5rem] border border-white/10 bg-white/[0.055] p-8">
             <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">AI Engine</p>
             <h2 className="mt-4 max-w-3xl text-5xl font-black leading-tight text-white">Intelligence at every gate, every resident touchpoint, every decision.</h2>
@@ -27,7 +27,7 @@ export default function WebsiteHome({ onLaunchDemo, onBookDemo }) {
           </div>
         </section>
         <PricingExperience onBookDemo={bookDemo} onLaunchDemo={launchDemo} />
-        <section id="about" className="relative scroll-mt-32 px-5 py-16">
+        <section id="about" className="relative scroll-mt-36 px-5 py-16">
           <div className="mx-auto max-w-7xl text-center">
             <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">Company</p>
             <h2 className="mt-4 text-5xl font-black text-white">Built for modern Indian communities.</h2>
