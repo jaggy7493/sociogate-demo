@@ -1,6 +1,11 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import ExperienceCenter from "./experience/ExperienceCenter";
 import WebsiteHome from "./website/pages/Home";
+import ContactPage from "./website/pages/ContactPage";
+import CompanyPage from "./website/pages/CompanyPage";
+import PricingPage from "./website/pages/PricingPage";
+import AIPage from "./website/pages/AIPage";
+import ProductsPage from "./website/pages/ProductsPage";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, Bell, UserCheck, Wallet, MessageSquareWarning, Megaphone, Siren, Home,
@@ -2956,6 +2961,7 @@ function AdminDashboard({ activeVisitor, setActiveVisitor, visitorHistory, setVi
 
 export default function SocioGateClickableDemo() {
   const [currentScreen, setCurrentScreen] = useState("website");
+  const [websitePage, setWebsitePage] = useState("home");
 
   const [mode, setMode] = useState("overview");
   const [activeVisitor, setActiveVisitor] = useState(null);
@@ -3062,14 +3068,21 @@ export default function SocioGateClickableDemo() {
   };
 
   if (currentScreen === "website") {
-    return (
-      <WebsiteHome
-        onLaunchDemo={() => setCurrentScreen("experience")}
-        onBookDemo={() => {
-          window.location.href = "mailto:hello@sociogate.in?subject=Book%20SocioGate%20Demo";
-        }}
-      />
-    );
+    const sharedWebsiteProps = {
+      onNavigate: setWebsitePage,
+      onLaunchDemo: () => setCurrentScreen("experience"),
+      onBookDemo: () => {
+        setWebsitePage("contact");
+      },
+    };
+
+    if (websitePage === "products") return <ProductsPage {...sharedWebsiteProps} />;
+    if (websitePage === "ai") return <AIPage {...sharedWebsiteProps} />;
+    if (websitePage === "pricing") return <PricingPage {...sharedWebsiteProps} />;
+    if (websitePage === "company") return <CompanyPage {...sharedWebsiteProps} />;
+    if (websitePage === "contact") return <ContactPage {...sharedWebsiteProps} />;
+
+    return <WebsiteHome {...sharedWebsiteProps} />;
   }
 
   if (currentScreen === "experience") {
