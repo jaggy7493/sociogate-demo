@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import ExperienceCenter from "./experience/ExperienceCenter";
 import WebsiteHome from "./website/pages/Home";
 import ContactPage from "./website/pages/ContactPage";
+import FAQPage from "./website/pages/FAQPage";
 import CompanyPage from "./website/pages/CompanyPage";
 import PricingPage from "./website/pages/PricingPage";
 import AIPage from "./website/pages/AIPage";
@@ -3081,6 +3082,7 @@ export default function SocioGateClickableDemo() {
     if (websitePage === "pricing") return <PricingPage {...sharedWebsiteProps} />;
     if (websitePage === "company") return <CompanyPage {...sharedWebsiteProps} />;
     if (websitePage === "contact") return <ContactPage {...sharedWebsiteProps} />;
+    if (websitePage === "faq") return <FAQPage {...sharedWebsiteProps} />;
 
     return <WebsiteHome {...sharedWebsiteProps} />;
   }

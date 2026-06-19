@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { productModules, trustPoints } from "../data/products";
 import WorkflowPreview from "./WorkflowPreview";
 import PremiumButton from "./PremiumButton";
+import ResidentShowcase from "./ResidentShowcase/ResidentShowcase";
 
 export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
   const [activeId, setActiveId] = useState(productModules[0].id);
@@ -13,6 +14,7 @@ export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
   return (
     <section id="products" className="relative scroll-mt-36 px-5 py-24">
       <div className="mx-auto max-w-7xl">
+        <ResidentShowcase onLaunchDemo={onLaunchDemo} />
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">Product Showcase</p>
