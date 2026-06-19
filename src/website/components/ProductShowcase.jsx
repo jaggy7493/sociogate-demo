@@ -6,6 +6,7 @@ import WorkflowPreview from "./WorkflowPreview";
 import PremiumButton from "./PremiumButton";
 import ResidentShowcase from "./ResidentShowcase/ResidentShowcase";
 import GuardShowcase from "./GuardShowcase/GuardShowcase";
+import AdminShowcase from "./AdminShowcase/AdminShowcase";
 
 export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
   const [activeId, setActiveId] = useState(productModules[0].id);
@@ -17,6 +18,7 @@ export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
       <div className="mx-auto max-w-7xl">
         <ResidentShowcase onLaunchDemo={onLaunchDemo} />
         <GuardShowcase onLaunchDemo={onLaunchDemo} />
+        <AdminShowcase onLaunchDemo={onLaunchDemo} />
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">Product Showcase</p>
