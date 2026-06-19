@@ -5,6 +5,7 @@ import { productModules, trustPoints } from "../data/products";
 import WorkflowPreview from "./WorkflowPreview";
 import PremiumButton from "./PremiumButton";
 import ResidentShowcase from "./ResidentShowcase/ResidentShowcase";
+import GuardShowcase from "./GuardShowcase/GuardShowcase";
 
 export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
   const [activeId, setActiveId] = useState(productModules[0].id);
@@ -15,6 +16,7 @@ export default function ProductShowcase({ onLaunchDemo, onBookDemo }) {
     <section id="products" className="relative scroll-mt-36 px-5 py-24">
       <div className="mx-auto max-w-7xl">
         <ResidentShowcase onLaunchDemo={onLaunchDemo} />
+        <GuardShowcase onLaunchDemo={onLaunchDemo} />
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.35em] text-cyan-300">Product Showcase</p>

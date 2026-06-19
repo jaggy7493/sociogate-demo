@@ -2,9 +2,9 @@ import React from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 
-const features = ["Visitor Approval", "Maintenance Bills", "Society Notices", "Community Polls", "Complaints", "SOS Protection", "Digital Passes", "Visitor History"];
+const features = ["Visitor Entry", "QR Verification", "Vehicle Intelligence", "Delivery Entry", "Blacklist Detection", "Emergency Response", "Visitor Logs", "Gate Activity"];
 
-export default function FeatureGrid() {
+export default function GuardFeatureGrid() {
   return (
     <div className="mt-8 grid gap-3 sm:grid-cols-2">
       {features.map((item, index) => (

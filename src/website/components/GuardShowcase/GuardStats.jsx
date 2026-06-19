@@ -1,8 +1,8 @@
 import React from "react";
 
-const stats = [["2 sec", "Average approval"], ["85%", "Less guard calls"], ["24×7", "SOS readiness"]];
+const stats = [["5 sec", "Average check-in"], ["99%", "Verification accuracy"], ["24×7", "Gate monitoring"]];
 
-export default function ResidentStats() {
+export default function GuardStats() {
   return (
     <div className="mx-auto mt-8 grid max-w-xl gap-3 sm:grid-cols-3">
       {stats.map(([value, label]) => (
