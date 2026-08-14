@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Building2, CheckCircle2, Rocket, ShieldCheck, Users } from "lucide-react";
 import PageShell from "../components/PageShell";
 import PremiumButton from "../components/PremiumButton";
+import CompanyTrust from "../components/CompanyTrust/CompanyTrust";
 
 const values = [
   ["Built for India", "Designed for apartments, villas, townships and commercial communities."],
@@ -58,6 +59,7 @@ export default function CompanyPage({ onNavigate, onLaunchDemo, onBookDemo }) {
           </div>
         </div>
       </section>
+      <CompanyTrust onNavigate={onNavigate} onLaunchDemo={onLaunchDemo} onBookDemo={onBookDemo} />
     </PageShell>
   );
 }
