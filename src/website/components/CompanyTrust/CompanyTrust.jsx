@@ -141,39 +141,6 @@ export default function CompanyTrust({ onNavigate, onLaunchDemo, onBookDemo }) {
         </div>
       </section>
 
-      <section className="px-5 py-10">
-        <div className="mx-auto max-w-7xl">
-          <div className="rounded-[2.5rem] border border-white/10 bg-white/[0.055] p-7">
-            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-              <div>
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-300/12 text-cyan-300">
-                  <BadgeCheck size={28} />
-                </div>
-                <h3 className="mt-5 text-3xl font-black text-white">Platform readiness</h3>
-                <p className="mt-3 leading-7 text-slate-300">
-                  Position SocioGate as a serious product for real societies, not just a demo website.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                {badges.map((badge, index) => (
-                  <motion.span
-                    key={badge}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.035 }}
-                    className="rounded-full border border-cyan-300/15 bg-cyan-300/10 px-4 py-2 text-sm font-black text-cyan-100"
-                  >
-                    {badge}
-                  </motion.span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="px-5 pb-24 pt-8">
         <div className="mx-auto max-w-7xl">
           <div className="rounded-[2.8rem] border border-cyan-300/20 bg-gradient-to-br from-blue-600/22 to-cyan-400/10 p-8 text-center">
